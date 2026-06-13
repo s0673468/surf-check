@@ -1,6 +1,10 @@
-# Surf Floripa Forecast Prototype
+# Floripa Surf Check
 
-A static browser prototype for checking day-window surf conditions around Florianopolis.
+A small static site for a quick, glanceable read on how the surf is shaping up around
+Florianópolis. Built for me and a few friends — pick a day and hour, see which beaches
+are the best bets, and tap one for a plain-language detail view.
+
+Pure HTML/CSS/JS, no build step, no API keys.
 
 ## Run
 
@@ -12,67 +16,58 @@ python3 -m http.server 4173
 
 Then visit `http://localhost:4173`.
 
+## Layout
+
+- **Controls** — day (Today + the next three weekdays) and hour (06:00–18:00).
+- **Best bets** — beaches ranked for the selected day/hour, with the top pick highlighted.
+- **Map** — the same scores as colored pins around the island (Leaflet + OpenStreetMap).
+- **Selected spot** — score, a plain-language read, key metrics (swell / wind / tide /
+  weather), an hour-by-hour timeline, and the closest spots for comparison.
+
+## Design
+
+Dark navy-violet canvas in the **Health design system** language: Outfit (display) +
+DM Sans (body) + JetBrains Mono (data readouts), teal as the lead accent, Material
+Symbols Rounded icons, 28px cards. See `~/.claude/skills/health-design-system`.
+
 ## Data
 
-The app calls Open-Meteo directly from the browser:
+The app calls Open-Meteo directly from the browser (no key required):
 
-- Forecast API: air temperature, cloud cover, precipitation probability, wind speed, wind direction, and gusts.
-- Marine API: wave height, swell height, wave direction, swell period, sea level height, and sea surface temperature.
+- **Forecast API** — air temperature, cloud cover, precipitation probability, wind
+  speed, wind direction, gusts.
+- **Marine API** — wave/swell height, direction, period, sea-level height, sea-surface
+  temperature.
 
-## Scoring Model
+## Scoring model
 
-Each beach has prototype metadata in `app.js`:
+Each beach has prototype metadata in `app.js` (approximate coordinates, preferred swell
+direction, offshore wind direction, ideal wave-height range, rough tide preference, plus
+a lightweight coastal profile). The displayed score is a weighted heuristic:
 
-- approximate coordinates
-- spot profile, exposure, and plain-language traits
-- coastal cues such as beach axis, shelter, and nearshore-depth feel
-- preferred swell direction
-- preferred offshore wind direction
-- ideal wave-height range
-- rough tide preference
+- 44% swell quality — height, period, swell direction
+- 27% wind quality — offshore/cross/onshore direction, speed, gust penalty
+- 12% coastal fit — beach angle, shelter, coarse nearshore-depth response
+- 9% tide fit — sea level vs. the beach's rough preferred tide
+- 8% weather comfort — rain and cloud penalty
 
-The displayed score is a weighted heuristic:
+These are heuristics combining live Open-Meteo values with rough spot metadata — not live
+human surf reports. Always worth a real look at the beach before paddling out.
 
-- 44% swell quality: height, period, and swell direction
-- 27% wind quality: offshore/cross/onshore direction, wind speed, and gust penalty
-- 12% coastal fit: beach angle, shelter, and coarse nearshore-depth response
-- 9% tide fit: sea level against that beach's rough preferred tide
-- 8% weather comfort: rain and cloud penalty
+## Deploy (GitHub Pages)
 
-Forecast confidence is shown separately because it should reduce trust in the prediction, not necessarily the surf quality itself.
+Pure static and key-free, so it deploys cleanly to GitHub Pages. From a repo with the
+files at the root and Pages enabled on the default branch:
 
-## Interpretation Layer
+```bash
+gh repo create <name> --source=. --push          # public or --private
+gh api -X POST repos/<owner>/<name>/pages -f source[branch]=<branch> -f source[path]=/
+```
 
-The selected beach panel now explains the forecast in surf terms:
+The site then serves at `https://<owner>.github.io/<name>/`.
 
-- what kind of beachbreak the spot is
-- why nearby beaches can differ despite being close
-- what the current swell, wind, tide, and weather imply for that beach
-- how the closest beaches compare at the selected hour
+## Next calibration pass
 
-These explanations are still heuristic. They combine the live Open-Meteo values with rough spot metadata, not live human surf reports.
-
-## Open Data Upgrade Layer
-
-The dashboard now includes an "Open data upgrades" panel. It also uses a lightweight precomputed coastal profile for each beach so beach angle, shelter, and coarse depth response influence the score before a heavier ingestion pipeline exists.
-
-Highest-value sources to add next:
-
-- GEBCO or NOAA ETOPO bathymetry: coarse depth profiles and nearshore slope.
-- OpenStreetMap Overpass coastline data: beach angle, headlands, lagoon mouths, and shelter.
-- Copernicus Marine wave forecasts: primary swell, secondary swell, and wind-wave partitions.
-- CHM/BNDO tide and maregraphic data: Brazil-specific tide predictions and observations.
-- PNBOIA/CHM buoy data: model bias checks against observed waves, wind, and sea state.
-- Copernicus Sentinel-2 imagery: sandbar and shoreline change checks for long beachbreaks.
-
-The practical next implementation would be a small preprocessing script that writes a local `data/spot_profiles.json` file with coastline angle, coarse bathymetry slope, and source metadata. The browser app can stay static while the heavier data work happens offline.
-
-## Next Calibration Pass
-
-The useful next step is to tune `BEACHES` from local knowledge:
-
-- which swell directions each beach really likes
-- which tides work best
-- which beaches close out when size increases
-- whether protected corners should be scored separately
-- session feedback such as "Praia Mole, 2026-06-14 08:00, actual 4/5"
+Tune `BEACHES` in `app.js` from local knowledge: which swell directions each beach
+really likes, which tides work best, which beaches close out as size increases, and
+whether protected corners should be scored separately.

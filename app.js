@@ -10,69 +10,6 @@ const SCORE_WEIGHTS = {
   weather: 0.08,
 };
 
-const DATA_SOURCES = [
-  {
-    key: "bathymetry",
-    label: "Depth profiles",
-    source: "GEBCO / NOAA ETOPO",
-    priority: "First pass",
-    url: "https://www.gebco.net/data-products/gridded-bathymetry-data",
-    improves: "Estimate nearshore slope, depth change, and broad swell focusing.",
-    use: "Better size and power adjustments for each beach.",
-    caveat: "Good for coarse shape; too coarse for exact sandbar calls.",
-  },
-  {
-    key: "coastline",
-    label: "Coastline and shelter",
-    source: "OpenStreetMap Overpass",
-    priority: "First pass",
-    url: "https://wiki.openstreetmap.org/wiki/Overpass_API",
-    improves: "Compute beach angle, headland shadowing, lagoon mouths, and island shelter.",
-    use: "Sharper swell-direction and wind-exposure scoring.",
-    caveat: "Needs local cleanup where mapped coastline is generalized.",
-  },
-  {
-    key: "wavePartitions",
-    label: "Wave partitions",
-    source: "Copernicus Marine",
-    priority: "Forecast upgrade",
-    url: "https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_WAV_001_027/description",
-    improves: "Split primary swell, secondary swell, and wind wave instead of using one blended sea state.",
-    use: "Less false optimism when the total wave number hides mixed or crossed swell.",
-    caveat: "Requires a backend or prefetch step for reliable app use.",
-  },
-  {
-    key: "tides",
-    label: "Local tide data",
-    source: "CHM BNDO",
-    priority: "Forecast upgrade",
-    url: "https://www.marinha.mil.br/chm/bndo/acesso",
-    improves: "Use Brazilian tide predictions and observed maregraphic stations where available.",
-    use: "Better sandbar depth timing than generic sea-level grid values.",
-    caveat: "Nearest station still may not represent each beach pocket exactly.",
-  },
-  {
-    key: "observations",
-    label: "Buoy and station checks",
-    source: "PNBOIA / CHM",
-    priority: "Calibration",
-    url: "https://www.marinha.mil.br/chm/dados-do-goos-brasil/pnboia",
-    improves: "Compare forecast wind, wave, pressure, and water readings against observations.",
-    use: "Detect model bias before it reaches the beach score.",
-    caveat: "Offshore buoys help calibration, not exact surf-zone shape.",
-  },
-  {
-    key: "sandbars",
-    label: "Sandbar snapshots",
-    source: "Sentinel-2",
-    priority: "Later",
-    url: "https://dataspace.copernicus.eu/data-collections/copernicus-sentinel-missions/sentinel-2",
-    improves: "Watch shoreline and shallow-bank changes after storms and large swell.",
-    use: "Keep long beachbreak profiles from going stale.",
-    caveat: "Clouds, water clarity, and tide timing limit image usefulness.",
-  },
-];
-
 const SPOT_DATA_PROFILES = {
   "praia-mole": {
     beachAxis: "E/ESE pocket",
@@ -474,10 +411,8 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.hourControls = document.querySelector("#hourControls");
   elements.selectedSummary = document.querySelector("#selectedSummary");
   elements.metricGrid = document.querySelector("#metricGrid");
-  elements.scoreBreakdown = document.querySelector("#scoreBreakdown");
   elements.rankedList = document.querySelector("#rankedList");
   elements.timelinePanel = document.querySelector("#timelinePanel");
-  elements.dataPanel = document.querySelector("#dataPanel");
   elements.map = document.querySelector("#map");
   elements.fallbackMap = document.querySelector("#fallbackMap");
 
@@ -490,9 +425,9 @@ document.addEventListener("DOMContentLoaded", () => {
 function renderControls() {
   const days = [
     { label: "Today", offset: 0 },
-    { label: "Tomorrow", offset: 1 },
-    { label: "+2 days", offset: 2 },
-    { label: "+3 days", offset: 3 },
+    { label: formatWeekday(1), offset: 1 },
+    { label: formatWeekday(2), offset: 2 },
+    { label: formatWeekday(3), offset: 3 },
   ];
 
   elements.dayControls.innerHTML = "";
@@ -718,29 +653,24 @@ function render() {
   }
 
   updateMarkers();
-  renderSelectedSummary();
   renderRankedList();
+  renderSelectedSummary();
   renderTimeline();
-  renderDataPanel();
 }
 
 function renderLoading() {
+  elements.rankedList.innerHTML = '<div class="empty-state">Loading beaches</div>';
   elements.selectedSummary.innerHTML = '<div class="empty-state">Loading forecast</div>';
   elements.metricGrid.innerHTML = "";
-  elements.scoreBreakdown.innerHTML = "";
-  elements.rankedList.innerHTML = '<div class="empty-state">Loading beaches</div>';
   elements.timelinePanel.innerHTML = '<div class="empty-state">Loading day window</div>';
-  elements.dataPanel.innerHTML = '<div class="empty-state">Loading data roadmap</div>';
 }
 
 function renderError() {
-  elements.selectedSummary.innerHTML =
-    '<div class="empty-state">Forecast data is unavailable right now.</div>';
+  elements.rankedList.innerHTML =
+    '<div class="empty-state">Forecast data is unavailable right now. Try refreshing in a minute.</div>';
+  elements.selectedSummary.innerHTML = "";
   elements.metricGrid.innerHTML = "";
-  elements.scoreBreakdown.innerHTML = "";
-  elements.rankedList.innerHTML = "";
   elements.timelinePanel.innerHTML = "";
-  elements.dataPanel.innerHTML = "";
 }
 
 function renderTemperatureStrip() {
@@ -783,17 +713,17 @@ function renderSelectedSummary() {
     elements.selectedSummary.innerHTML =
       '<div class="empty-state">No forecast for this beach and hour.</div>';
     elements.metricGrid.innerHTML = "";
-    elements.scoreBreakdown.innerHTML = "";
     return;
   }
 
   const score = scored.score;
   const badgeClass = pinClass(score.score);
   elements.selectedSummary.innerHTML = `
+    <span class="panel-eyebrow">Selected spot</span>
     <div class="summary-top">
       <div>
         <h2 class="beach-name">${escapeHtml(beach.name)}</h2>
-        <p class="beach-meta">${escapeHtml(formatDayHour(state.selectedDayOffset, state.selectedHour))} · ${escapeHtml(beach.note)}</p>
+        <p class="beach-meta">${escapeHtml(formatDayHour(state.selectedDayOffset, state.selectedHour))} · ${escapeHtml(beach.breakType)}</p>
       </div>
       <div class="score-badge ${badgeClass}">
         <span class="score-number">${score.score}</span>
@@ -801,19 +731,6 @@ function renderSelectedSummary() {
       </div>
     </div>
     <p class="spot-read">${escapeHtml(buildSpotRead(scored))}</p>
-    <div class="spot-profile">
-      <div>
-        <span class="profile-label">Spot type</span>
-        <strong>${escapeHtml(beach.breakType)}</strong>
-        <span>${escapeHtml(beach.profile)}</span>
-      </div>
-      <div>
-        <span class="profile-label">Why nearby beaches differ</span>
-        <strong>${escapeHtml(beach.exposure)} exposure</strong>
-        <span>${escapeHtml(beach.whyNearby)}</span>
-      </div>
-    </div>
-    ${renderCoastalCues(beach)}
     <div class="trait-list">
       ${beach.traits.map((trait) => `<span>${escapeHtml(trait)}</span>`).join("")}
     </div>
@@ -823,7 +740,6 @@ function renderSelectedSummary() {
   `;
 
   renderMetrics(scored);
-  renderBreakdown(score);
 }
 
 function renderMetrics(scored) {
@@ -831,11 +747,11 @@ function renderMetrics(scored) {
   const beach = scored.beach;
   const swellRead = describeSwell(beach, sample);
   const windRead = describeWind(beach, sample);
-  const coastalRead = describeCoastalFit(beach, sample, score.parts.coastal);
   const tideRead = describeTide(beach, sample, score);
   const weatherRead = describeWeather(sample);
   const metrics = [
     {
+      icon: "waves",
       label: "Swell",
       value: `${formatNumber(sample.swellHeight ?? sample.waveHeight, 1)} m · ${formatNumber(sample.swellPeriod ?? sample.wavePeriod, 1)} s`,
       sub: `${degToCompass(sample.swellDirection ?? sample.waveDirection)} ${formatDegrees(sample.swellDirection ?? sample.waveDirection)}`,
@@ -843,6 +759,7 @@ function renderMetrics(scored) {
       tone: partTone(score.parts.swell),
     },
     {
+      icon: "air",
       label: "Wind",
       value: `${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)} km/h`,
       sub: `${score.windQuality} · gust ${formatNumber(sample.windGusts, 0)} km/h`,
@@ -850,13 +767,7 @@ function renderMetrics(scored) {
       tone: partTone(score.parts.wind),
     },
     {
-      label: "Coastal fit",
-      value: `${Math.round(score.parts.coastal)}%`,
-      sub: `${spotDataProfile(beach).depth} · ${spotDataProfile(beach).shelter}`,
-      detail: coastalRead.detail,
-      tone: partTone(score.parts.coastal),
-    },
-    {
+      icon: "water",
       label: "Tide",
       value: `${formatSigned(sample.seaLevel)} m`,
       sub: `${score.tideTrend} · ${score.tideQuality}`,
@@ -864,18 +775,12 @@ function renderMetrics(scored) {
       tone: partTone(score.parts.tide),
     },
     {
+      icon: "wb_sunny",
       label: "Weather",
       value: `${formatNumber(sample.temperature, 0)}°C · ${formatNumber(sample.precipitationProbability, 0)}% rain`,
       sub: `${formatNumber(sample.cloudCover, 0)}% cloud · ${formatNumber(sample.seaTemperature, 0)}°C water`,
       detail: weatherRead.detail,
       tone: partTone(score.parts.weather),
-    },
-    {
-      label: "This beach wants",
-      value: `${compassWindow(beach.swellCenter, beach.swellSpread)} swell`,
-      sub: `${degToCompass(beach.offshoreWind)} wind · ${formatSigned(beach.idealTide)} m tide`,
-      detail: `${formatNumber(beach.idealHeight[0], 1)}-${formatNumber(beach.idealHeight[1], 1)} m is the preferred size range for this spot in the prototype model.`,
-      tone: "neutral",
     },
   ];
 
@@ -883,60 +788,10 @@ function renderMetrics(scored) {
     .map(
       (metric) => `
         <div class="metric metric-${escapeHtml(metric.tone)}">
-          <span class="metric-label">${escapeHtml(metric.label)}</span>
+          <span class="metric-label"><span class="material-symbols-rounded" aria-hidden="true">${escapeHtml(metric.icon)}</span>${escapeHtml(metric.label)}</span>
           <span class="metric-value">${escapeHtml(metric.value)}</span>
           <span class="metric-sub">${escapeHtml(metric.sub)}</span>
           <span class="metric-detail">${escapeHtml(metric.detail)}</span>
-        </div>
-      `,
-    )
-    .join("");
-}
-
-function renderBreakdown(score) {
-  const rows = [
-    {
-      label: "Swell",
-      value: score.parts.swell,
-      copy: "The largest part of the score. Size, period, and direction decide whether the beach is actually receiving useful wave energy.",
-    },
-    {
-      label: "Wind",
-      value: score.parts.wind,
-      copy: "Offshore or cross-offshore wind usually cleans the wave face. Onshore wind adds chop even if the swell is good.",
-    },
-    {
-      label: "Coastal fit",
-      value: score.parts.coastal,
-      copy: "Beach angle, shelter, and coarse depth profile now adjust how much of the offshore forecast should matter at this spot.",
-    },
-    {
-      label: "Tide",
-      value: score.parts.tide,
-      copy: "Small but spot-specific. The same tide can help one sandbar stand up and make another section too deep or too shallow.",
-    },
-    {
-      label: "Weather",
-      value: score.parts.weather,
-      copy: "Mostly comfort and visibility. Rain and cloud matter less than swell and wind, but they affect how pleasant the window feels.",
-    },
-    {
-      label: "Confidence",
-      value: score.confidence,
-      copy: "Forecast trust falls farther out in time. Treat lower confidence as a reason to recheck before leaving.",
-    },
-  ];
-
-  elements.scoreBreakdown.innerHTML = rows
-    .map(
-      ({ label, value, copy }) => `
-        <div class="breakdown-row">
-          <div class="breakdown-line">
-            <span>${escapeHtml(label)}</span>
-            <span>${Math.round(value)}%</span>
-          </div>
-          <div class="track"><div class="bar" style="width: ${clamp(value, 0, 100)}%"></div></div>
-          <p class="breakdown-copy">${escapeHtml(copy)}</p>
         </div>
       `,
     )
@@ -951,40 +806,67 @@ function renderRankedList() {
     .filter((item) => item.scored)
     .sort((a, b) => b.scored.score.score - a.scored.score.score);
 
+  if (!scoredBeaches.length) {
+    elements.rankedList.innerHTML =
+      '<div class="empty-state">No forecast for this day and hour yet.</div>';
+    return;
+  }
+
   const title = formatDayHour(state.selectedDayOffset, state.selectedHour);
+  const [top, ...rest] = scoredBeaches;
+
   elements.rankedList.innerHTML = `
     <div class="section-head">
-      <h2>Best nearby calls</h2>
+      <h2><span class="head-icon material-symbols-rounded" aria-hidden="true">surfing</span>Best bets</h2>
       <span>${escapeHtml(title)}</span>
     </div>
+    ${renderTopBet(top)}
     <div class="beach-list">
-      ${scoredBeaches
-        .map(({ beach, scored }) => {
-          const sample = scored.sample;
-          const score = scored.score.score;
-          const rowRead = compactSessionRead(scored);
-          return `
-            <button class="beach-row" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}">
-              <span class="row-score ${pinClass(score)}">${score}</span>
-              <span class="row-copy">
-                <span class="row-name">${escapeHtml(beach.name)}</span>
-                <span class="row-meta">${escapeHtml(rowRead)}</span>
-                <span class="row-data">${formatNumber(sample.swellHeight ?? sample.waveHeight, 1)} m @ ${formatNumber(sample.swellPeriod ?? sample.wavePeriod, 1)} s from ${degToCompass(sample.swellDirection ?? sample.waveDirection)}</span>
-              </span>
-              <span class="row-wind">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)} km/h</span>
-            </button>
-          `;
-        })
-        .join("")}
+      ${rest.map(renderBeachRow).join("")}
     </div>
   `;
 
-  elements.rankedList.querySelectorAll(".beach-row").forEach((row) => {
+  elements.rankedList.querySelectorAll("[data-beach-id]").forEach((row) => {
     row.addEventListener("click", () => {
       state.selectedBeachId = row.dataset.beachId;
       render();
     });
   });
+}
+
+function renderTopBet({ beach, scored }) {
+  const sample = scored.sample;
+  const score = scored.score.score;
+  const tier = pinClass(score).replace("pin-", "");
+  return `
+    <button class="bet-hero tier-${tier}" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}">
+      <span class="bet-hero-score ${pinClass(score)}">${score}</span>
+      <span class="bet-hero-body">
+        <span class="bet-hero-tag">Top pick · ${escapeHtml(scored.score.label)}</span>
+        <span class="bet-hero-name">${escapeHtml(beach.name)}</span>
+        <span class="bet-hero-read">${escapeHtml(compactSessionRead(scored))}</span>
+        <span class="bet-hero-stats">
+          <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">waves</span><span class="mono">${formatNumber(sample.swellHeight ?? sample.waveHeight, 1)} m @ ${formatNumber(sample.swellPeriod ?? sample.wavePeriod, 1)} s ${degToCompass(sample.swellDirection ?? sample.waveDirection)}</span></span>
+          <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">air</span><span class="mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)} km/h</span></span>
+        </span>
+      </span>
+    </button>
+  `;
+}
+
+function renderBeachRow({ beach, scored }) {
+  const sample = scored.sample;
+  const score = scored.score.score;
+  return `
+    <button class="beach-row" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}">
+      <span class="row-score ${pinClass(score)}">${score}</span>
+      <span class="row-copy">
+        <span class="row-name">${escapeHtml(beach.name)}</span>
+        <span class="row-data mono">${formatNumber(sample.swellHeight ?? sample.waveHeight, 1)} m @ ${formatNumber(sample.swellPeriod ?? sample.wavePeriod, 1)} s ${degToCompass(sample.swellDirection ?? sample.waveDirection)}</span>
+      </span>
+      <span class="row-wind mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)}<small> km/h</small></span>
+    </button>
+  `;
 }
 
 function renderTimeline() {
@@ -997,8 +879,8 @@ function renderTimeline() {
 
   elements.timelinePanel.innerHTML = `
     <div class="section-head">
-      <h2>${escapeHtml(beach.name)} day window</h2>
-      <span>${escapeHtml(formatDay(state.selectedDayOffset))}</span>
+      <h2><span class="head-icon material-symbols-rounded" aria-hidden="true">schedule</span>Hour by hour</h2>
+      <span>${escapeHtml(beach.name)} · ${escapeHtml(formatDay(state.selectedDayOffset))}</span>
     </div>
     <div class="timeline">
       ${bars
@@ -1025,92 +907,13 @@ function renderTimeline() {
       render();
     });
   });
-}
 
-function renderCoastalCues(beach) {
-  const profile = spotDataProfile(beach);
-  const needs = profile.dataNeeds.map(sourceByKey).filter(Boolean).slice(0, 4);
-
-  return `
-    <div class="coastal-cues">
-      <span class="profile-label">Coastal cues</span>
-      <div class="cue-grid">
-        <div class="cue-card">
-          <span>Beach axis</span>
-          <strong>${escapeHtml(profile.beachAxis)}</strong>
-        </div>
-        <div class="cue-card">
-          <span>Depth feel</span>
-          <strong>${escapeHtml(profile.depth)}</strong>
-        </div>
-        <div class="cue-card">
-          <span>Shelter</span>
-          <strong>${escapeHtml(profile.shelter)}</strong>
-        </div>
-      </div>
-      <p>${escapeHtml(profile.localFeature)}</p>
-      <div class="data-need-list" aria-label="Useful open data for this beach">
-        ${needs.map((source) => `<span>${escapeHtml(source.label)}</span>`).join("")}
-      </div>
-    </div>
-  `;
-}
-
-function renderDataPanel() {
-  const beach = selectedBeach();
-  const profile = spotDataProfile(beach);
-  const prioritySources = profile.dataNeeds.map(sourceByKey).filter(Boolean);
-
-  elements.dataPanel.innerHTML = `
-    <div class="section-head data-panel-head">
-      <div>
-        <h2>Open data upgrades</h2>
-        <p>Coastal profiles now affect the score. These public layers are the next path to replace hand-tuned proxies with derived data.</p>
-      </div>
-      <span>active proxy layer</span>
-    </div>
-    <div class="data-layout">
-      <div class="priority-box">
-        <span class="profile-label">For ${escapeHtml(beach.name)}</span>
-        <h3>Active coastal proxy</h3>
-        <p>${escapeHtml(profile.forecastImpact)}</p>
-        <div class="priority-list">
-          ${prioritySources
-            .map(
-              (source, index) => `
-                <div class="priority-item">
-                  <span>${index + 1}</span>
-                  <div>
-                    <strong>${escapeHtml(source.label)}</strong>
-                    <p>${escapeHtml(source.use)}</p>
-                  </div>
-                </div>
-              `,
-            )
-            .join("")}
-        </div>
-      </div>
-      <div class="source-grid">
-        ${DATA_SOURCES.map((source) => renderSourceCard(source, profile.dataNeeds.includes(source.key))).join("")}
-      </div>
-    </div>
-  `;
-}
-
-function renderSourceCard(source, isRelevant) {
-  return `
-    <article class="source-card${isRelevant ? " is-relevant" : ""}">
-      <div class="source-top">
-        <span class="source-label">${escapeHtml(source.label)}</span>
-        <span class="source-priority">${escapeHtml(source.priority)}</span>
-      </div>
-      <h3>${escapeHtml(source.source)}</h3>
-      <p>${escapeHtml(source.improves)}</p>
-      <p class="source-use">${escapeHtml(source.use)}</p>
-      <span class="source-caveat">${escapeHtml(source.caveat)}</span>
-      <a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">Source</a>
-    </article>
-  `;
+  elements.timelinePanel.querySelectorAll(".contrast-item[data-beach-id]").forEach((item) => {
+    item.addEventListener("click", () => {
+      state.selectedBeachId = item.dataset.beachId;
+      render();
+    });
+  });
 }
 
 function buildSpotRead(scored) {
@@ -1339,8 +1142,8 @@ function renderNearbyContrast(beach, selectedScored) {
   return `
     <div class="nearby-contrast">
       <div class="section-head contrast-head">
-        <h3>Nearby contrast</h3>
-        <span>why close spots split</span>
+        <h3><span class="head-icon material-symbols-rounded" aria-hidden="true">near_me</span>Closest spots</h3>
+        <span>tap to compare</span>
       </div>
       <div class="contrast-list">
         ${nearby
@@ -1354,7 +1157,7 @@ function renderNearbyContrast(beach, selectedScored) {
                   : `${otherBeach.name} +${Math.abs(delta)}`;
 
             return `
-              <div class="contrast-item">
+              <button class="contrast-item" type="button" data-beach-id="${otherBeach.id}">
                 <span class="contrast-score ${pinClass(scored.score.score)}">${scored.score.score}</span>
                 <div class="contrast-copy">
                   <div>
@@ -1363,7 +1166,7 @@ function renderNearbyContrast(beach, selectedScored) {
                   </div>
                   <p>${escapeHtml(contrastReason(selectedScored, scored))}</p>
                 </div>
-              </div>
+              </button>
             `;
           })
           .join("")}
@@ -1815,10 +1618,6 @@ function spotDataProfile(beach) {
   );
 }
 
-function sourceByKey(key) {
-  return DATA_SOURCES.find((source) => source.key === key) ?? null;
-}
-
 function average(values) {
   const finite = values.filter(Number.isFinite);
   if (!finite.length) return NaN;
@@ -1851,6 +1650,16 @@ function formatDay(offset) {
     weekday: "short",
     month: "short",
     day: "numeric",
+  }).format(target);
+}
+
+function formatWeekday(offset) {
+  const now = new Date();
+  const target = new Date(now);
+  target.setDate(now.getDate() + offset);
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ,
+    weekday: "short",
   }).format(target);
 }
 

@@ -1,0 +1,5 @@
+# Local Claude Code preview/launch helpers
+.claude/
+
+# OS cruft
+.DS_Store

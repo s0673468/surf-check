@@ -3,7 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Surf Floripa Forecast</title>
+    <title>Floripa Surf Check</title>
+    <meta
+      name="description"
+      content="A quick read on how the surf is shaping up around Florianópolis."
+    />
+    <meta name="theme-color" content="#1B1B29" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://api.open-meteo.com" />
@@ -11,7 +16,11 @@
     <link rel="preconnect" href="https://unpkg.com" />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,-50..200"
     />
     <link
       rel="stylesheet"
@@ -22,9 +31,12 @@
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Florianopolis</p>
-          <h1>Surf Morning Score</h1>
+        <div class="brand">
+          <span class="brand-mark material-symbols-rounded" aria-hidden="true">surfing</span>
+          <div>
+            <p class="eyebrow">Florianópolis</p>
+            <h1>Surf check</h1>
+          </div>
         </div>
         <div class="topbar-status">
           <div class="status-pill" id="statusPill">
@@ -50,7 +62,8 @@
           </div>
         </section>
 
-        <section class="main-grid">
+        <section class="hero-grid">
+          <div class="best-bets" id="rankedList"></div>
           <div class="map-panel">
             <div id="map" class="map"></div>
             <div id="fallbackMap" class="fallback-map" hidden></div>
@@ -61,21 +74,20 @@
               <span><i class="legend-swatch poor"></i>&lt;50</span>
             </div>
           </div>
+        </section>
 
+        <section class="detail-grid">
           <aside class="side-panel">
             <div class="selected-summary" id="selectedSummary"></div>
             <div class="metric-grid" id="metricGrid"></div>
-            <div class="breakdown" id="scoreBreakdown"></div>
           </aside>
-        </section>
-
-        <section class="bottom-grid">
-          <div class="ranked-list" id="rankedList"></div>
           <div class="timeline-panel" id="timelinePanel"></div>
         </section>
-
-        <section class="data-panel" id="dataPanel"></section>
       </main>
+
+      <footer class="app-footer">
+        <span>Forecast from Open-Meteo · heuristic scoring, not a substitute for a real look at the beach.</span>
+      </footer>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
