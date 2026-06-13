@@ -6,6 +6,10 @@ are the best bets, and tap one for a plain-language detail view.
 
 Pure HTML/CSS/JS, no build step, no API keys.
 
+**Languages:** Portuguese (default) and English, toggled top-right (`PT` / `EN`). The
+choice is remembered via `localStorage`. Dates, compass points, score labels, and all
+generated prose localize together.
+
 ## Run
 
 Open `index.html` directly, or serve the folder locally:
@@ -41,18 +45,30 @@ The app calls Open-Meteo directly from the browser (no key required):
 
 ## Scoring model
 
-Each beach has prototype metadata in `app.js` (approximate coordinates, preferred swell
-direction, offshore wind direction, ideal wave-height range, rough tide preference, plus
-a lightweight coastal profile). The displayed score is a weighted heuristic:
+The 0–100 score is an energy-and-wind model (rewritten from the original additive
+heuristic), grounded in how real surf-rating services work — score the *clean swell's
+energy*, then degrade it for wind:
 
-- 44% swell quality — height, period, swell direction
-- 27% wind quality — offshore/cross/onshore direction, speed, gust penalty
-- 12% coastal fit — beach angle, shelter, coarse nearshore-depth response
-- 9% tide fit — sea level vs. the beach's rough preferred tide
-- 8% weather comfort — rain and cloud penalty
+1. **Swell quality (the dome).** Built from wave **energy ∝ H²·T** of the swell
+   partitions (primary + half the secondary swell), not blended significant height — so
+   `1.4 m @ 14 s` rightly outranks `2 m @ 7 s`. A **period curve** rewards groundswell
+   (poor < 8 s, solid 10–13 s, premium 13 s+). A **windsea-contamination** penalty cuts
+   quality when the wind-wave partition is large (chop on the face). Swell **direction**
+   modulates this against each beach's preferred window.
+2. **Wind (multiplicative gate).** Clean-swell potential is multiplied by a wind factor:
+   glassy and light-offshore groom the face, onshore degrades steeply past ~9 km/h, gusts
+   and strong wind from any direction cap it. A great swell with onshore wind collapses
+   toward ~35% of its potential, instead of still scoring well.
+3. **Context (gated).** Coastal fit, tide, and weather contribute a small amount that is
+   *gated by the core* so they can't inflate a flat or blown-out hour.
 
-These are heuristics combining live Open-Meteo values with rough spot metadata — not live
-human surf reports. Always worth a real look at the beach before paddling out.
+Data is the full swell decomposition from Open-Meteo (primary + secondary swell, wind
+wave, tide via `sea_level_height_msl`). `ENERGY_REF` in `app.js` is the main calibration
+knob — raise it for a stricter scale, lower it for a friendlier one. Tune the per-beach
+`swellCenter` / `offshoreWind` / `idealTide` from local knowledge.
+
+These are heuristics over model data — not live human surf reports. Always worth a real
+look at the beach before paddling out.
 
 ## Deploy (GitHub Pages)
 

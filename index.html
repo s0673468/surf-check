@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Floripa Surf Check</title>
+    <title>Surfe em Floripa</title>
     <meta
       name="description"
-      content="A quick read on how the surf is shaping up around Florianópolis."
+      content="Como o surfe está se formando nas praias de Florianópolis."
     />
     <meta name="theme-color" content="#1B1B29" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -35,17 +35,21 @@
           <span class="brand-mark material-symbols-rounded" aria-hidden="true">surfing</span>
           <div>
             <p class="eyebrow">Florianópolis</p>
-            <h1>Surf check</h1>
+            <h1>Como tá o surfe</h1>
           </div>
         </div>
         <div class="topbar-status">
+          <div class="lang-toggle" id="langToggle" role="group" aria-label="Idioma / Language">
+            <button type="button" data-lang="pt" aria-pressed="true">PT</button>
+            <button type="button" data-lang="en" aria-pressed="false">EN</button>
+          </div>
           <div class="status-pill" id="statusPill">
             <span class="status-dot"></span>
-            <span id="statusText">Loading forecast</span>
+            <span id="statusText">Carregando previsão</span>
           </div>
           <div class="temp-strip" id="tempStrip">
-            <span>Regional temps</span>
-            <strong>Air -- · Water --</strong>
+            <span>Temperaturas</span>
+            <strong>Ar -- · Água --</strong>
           </div>
         </div>
       </header>
@@ -53,11 +57,11 @@
       <main class="dashboard">
         <section class="control-strip" aria-label="Forecast controls">
           <div class="control-group">
-            <span class="control-label">Day</span>
+            <span class="control-label">Dia</span>
             <div class="segmented" id="dayControls"></div>
           </div>
           <div class="control-group hour-control">
-            <span class="control-label">Hour</span>
+            <span class="control-label">Hora</span>
             <div class="hour-rail" id="hourControls"></div>
           </div>
         </section>
@@ -86,7 +90,7 @@
       </main>
 
       <footer class="app-footer">
-        <span>Forecast from Open-Meteo · heuristic scoring, not a substitute for a real look at the beach.</span>
+        <span>Previsão do Open-Meteo · pontuação heurística — não substitui dar uma olhada no mar de verdade.</span>
       </footer>
     </div>
 

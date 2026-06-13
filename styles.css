@@ -169,6 +169,41 @@ h1 {
   min-width: 0;
 }
 
+.lang-toggle {
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+}
+
+.lang-toggle button {
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--fg3);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  min-height: 28px;
+  padding: 0 12px;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.lang-toggle button:hover {
+  color: var(--fg1);
+}
+
+.lang-toggle button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .status-pill {
   align-items: center;
   background: var(--secondary);
@@ -1189,6 +1224,10 @@ h1 {
   .status-pill,
   .temp-strip {
     justify-content: flex-start;
+  }
+
+  .lang-toggle {
+    justify-self: start;
   }
 
   h1 {

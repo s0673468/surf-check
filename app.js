@@ -2,12 +2,15 @@ const TZ = "America/Sao_Paulo";
 const HOUR_MIN = 6;
 const HOUR_MAX = 18;
 const HOURS = Array.from({ length: HOUR_MAX - HOUR_MIN + 1 }, (_, index) => HOUR_MIN + index);
+// Relative influence of each dimension. The final score combines them
+// multiplicatively (see scoreSample); these weights drive the explanatory layer
+// (which factor most explains a difference, and the limiting/support factor).
 const SCORE_WEIGHTS = {
-  swell: 0.44,
-  wind: 0.27,
-  coastal: 0.12,
-  tide: 0.09,
-  weather: 0.08,
+  swell: 0.45,
+  wind: 0.3,
+  coastal: 0.1,
+  tide: 0.08,
+  weather: 0.07,
 };
 
 const SPOT_DATA_PROFILES = {
@@ -391,15 +394,227 @@ const BEACHES = [
 ];
 
 const state = {
-  selectedBeachId: "praia-mole",
+  selectedBeachId: "ingleses",
   selectedDayOffset: 1,
   selectedHour: 8,
+  lang: "pt",
   forecasts: new Map(),
   map: null,
   markers: new Map(),
   loading: true,
   error: "",
 };
+
+// ---------------------------------------------------------------------------
+// Internationalization (pt = default, en). state.lang selects the language.
+// ---------------------------------------------------------------------------
+const UI = {
+  pt: {
+    h1: "Como tá o surfe",
+    loading: "Carregando previsão",
+    updated: (time) => `Previsão atualizada às ${time}`,
+    unavailable: "Previsão indisponível",
+    partial: (n, m) => `${n}/${m} praias atualizadas`,
+    regionalTemps: "Temperaturas",
+    airWaterEmpty: "Ar -- · Água --",
+    airWater: (air, water) => `${air}°C ar · ${water}°C água`,
+    day: "Dia",
+    hour: "Hora",
+    today: "Hoje",
+    bestBets: "Melhores opções",
+    topPick: (label) => `Top do dia · ${label}`,
+    selectedSpot: "Praia selecionada",
+    swell: "Swell",
+    wind: "Vento",
+    tide: "Maré",
+    weather: "Tempo",
+    hourByHour: "Hora a hora",
+    closestSpots: "Praias próximas",
+    tapToCompare: "toque para comparar",
+    away: "de distância",
+    nearlyTied: "Quase empatadas",
+    rain: "chuva",
+    cloud: "nuvens",
+    water: "água",
+    air: "ar",
+    gust: "rajada",
+    noForecastHour: "Sem previsão para esta praia neste horário.",
+    noForecastWindow: "Ainda sem previsão para este dia e horário.",
+    errorState: "Previsão indisponível agora. Tente atualizar em um minuto.",
+    loadingBeaches: "Carregando praias",
+    loadingWindow: "Carregando o dia",
+    footer:
+      "Previsão do Open-Meteo · pontuação heurística — não substitui dar uma olhada no mar de verdade.",
+  },
+  en: {
+    h1: "Surf check",
+    loading: "Loading forecast",
+    updated: (time) => `Live forecast updated ${time}`,
+    unavailable: "Forecast unavailable",
+    partial: (n, m) => `${n}/${m} beaches updated`,
+    regionalTemps: "Regional temps",
+    airWaterEmpty: "Air -- · Water --",
+    airWater: (air, water) => `${air}°C air · ${water}°C water`,
+    day: "Day",
+    hour: "Hour",
+    today: "Today",
+    bestBets: "Best bets",
+    topPick: (label) => `Top pick · ${label}`,
+    selectedSpot: "Selected spot",
+    swell: "Swell",
+    wind: "Wind",
+    tide: "Tide",
+    weather: "Weather",
+    hourByHour: "Hour by hour",
+    closestSpots: "Closest spots",
+    tapToCompare: "tap to compare",
+    away: "away",
+    nearlyTied: "Nearly tied",
+    rain: "rain",
+    cloud: "cloud",
+    water: "water",
+    air: "air",
+    gust: "gust",
+    noForecastHour: "No forecast for this beach and hour.",
+    noForecastWindow: "No forecast for this day and hour yet.",
+    errorState: "Forecast data is unavailable right now. Try refreshing in a minute.",
+    loadingBeaches: "Loading beaches",
+    loadingWindow: "Loading day window",
+    footer:
+      "Forecast from Open-Meteo · heuristic scoring, not a substitute for a real look at the beach.",
+  },
+};
+
+const COMPASS = {
+  en: ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"],
+  pt: ["N", "NNE", "NE", "LNE", "L", "LSE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"],
+};
+
+// Portuguese translations for the displayed beach prose. English stays in BEACHES.
+const BEACH_PT = {
+  "praia-mole": {
+    breakType: "Beachbreak de areia íngreme",
+    traits: ["Pega swell rápido", "Sensível ao vento", "Pode ficar forte"],
+    whyNearby:
+      "Mole e Joaquina são pertinho, mas a Mole é mais curta e íngreme, com pontas de pedra, então pequenas mudanças de tamanho, vento ou banco aparecem mais rápido aqui.",
+  },
+  joaquina: {
+    breakType: "Beachbreak de bancos de areia",
+    traits: ["Segura mais tamanho", "Depende do banco", "Praia de campeonato"],
+    whyNearby:
+      "Joaquina e Campeche dividem a mesma costa aberta, mas o pico principal da Joaquina tem bancos e influência de ponta diferentes, então o mesmo swell pode chegar mais focado aqui.",
+  },
+  campeche: {
+    breakType: "Beachbreak longo de bancos",
+    traits: ["Praia longa", "Picos que mudam", "Pode dar parede"],
+    whyNearby:
+      "Campeche é quase contínua com a Joaquina, mas a praia mais longa, os bancos diferentes e a exposição voltada à ilha fazem as linhas de swell quebrarem de jeitos diferentes.",
+  },
+  "barra-da-lagoa": {
+    breakType: "Beachbreak de enseada e canal",
+    traits: ["Mais tranquila", "Swell filtrado", "Boa alternativa"],
+    whyNearby:
+      "A Barra fica junto ao canal da lagoa e se esconde atrás do formato da costa, então praias abertas próximas podem estar maiores enquanto a Barra fica menor e mais limpa.",
+  },
+  mocambique: {
+    breakType: "Beachbreak longo e aberto",
+    traits: ["Muito exposta", "Vários picos", "Crua com vento"],
+    whyNearby:
+      "Moçambique se conecta à Barra, mas é bem menos abrigada, então o mesmo swell pode chegar maior e mais bagunçado aqui, enquanto a Barra fica mais tranquila.",
+  },
+  santinho: {
+    breakType: "Beachbreak de enseada",
+    traits: ["Sensível ao ângulo", "Picos definidos", "Exposição nordeste"],
+    whyNearby:
+      "O Santinho fica ao lado dos Ingleses, mas seu ângulo é mais exposto a swells de leste e menos protegido pelo formato da baía ao norte.",
+  },
+  brava: {
+    breakType: "Beachbreak entre falésias",
+    traits: ["Ímã de swell leste", "Picos com força", "Entre falésias"],
+    whyNearby:
+      "A Brava fica perto dos Ingleses, mas seu ângulo entre falésias encara o swell de frente, então pode ter mais força quando os Ingleses parecem menores.",
+  },
+  ingleses: {
+    breakType: "Beachbreak largo",
+    traits: ["Opção mais suave", "Baía aberta", "Menos força"],
+    whyNearby:
+      "Os Ingleses ficam entre a Brava e o Santinho, mas têm uma baía mais larga e protegida, então praias próximas podem mostrar mais tamanho e força.",
+  },
+  matadeiro: {
+    breakType: "Beachbreak de enseada",
+    traits: ["Mais exposta que a Armação", "Boa forma com swell SE", "Acesso a pé"],
+    whyNearby:
+      "O Matadeiro fica ao lado da Armação, mas o rio e o formato de enseada o expõem a mais energia do mar, então pode estar surfável enquanto a Armação está pequena.",
+  },
+  armacao: {
+    breakType: "Beachbreak protegido",
+    traits: ["Protegida", "Precisa de mais swell", "Alternativa suave"],
+    whyNearby:
+      "A Armação fica ao lado do Matadeiro, mas num canto mais protegido, então o mesmo swell pode perder tamanho e força antes de chegar à praia.",
+  },
+  "lagoinha-do-leste": {
+    breakType: "Beachbreak remoto",
+    traits: ["Remota", "Muito exposta", "Alto potencial"],
+    whyNearby:
+      "A Lagoinha do Leste fica mais no canto sudeste, então as falésias e a exposição aberta podem deixá-la maior ou mais afetada pelo vento do que o Matadeiro ou a Armação.",
+  },
+};
+
+// Portuguese for the spot-profile phrases that surface in reasons / contrast text.
+const PROFILE_PT = {
+  "praia-mole": { depth: "Rampa curta e íngreme perto da praia", shelter: "Pouco abrigo", beachAxis: "Enseada L/LSE" },
+  joaquina: { depth: "Bancos de moderados a íngremes", shelter: "Pouco abrigo", beachAxis: "Praia aberta a LSE" },
+  campeche: { depth: "Bancos largos e instáveis", shelter: "Influência parcial da ilha", beachAxis: "Litoral longo a LSE" },
+  "barra-da-lagoa": { depth: "Areia influenciada pelo canal", shelter: "Abrigo médio a alto", beachAxis: "Enseada filtrada LNE/L" },
+  mocambique: { depth: "Plataforma de areia longa e exposta", shelter: "Pouco abrigo", beachAxis: "Costa muito aberta LNE/L" },
+  santinho: { depth: "Enseada com efeito das pontas", shelter: "Abrigo moderado nas pontas", beachAxis: "Enseada LNE/L" },
+  brava: { depth: "Zona curta e com força perto da praia", shelter: "Pouco abrigo", beachAxis: "Entre falésias NE/L" },
+  ingleses: { depth: "Bancos de areia mais suaves de baía", shelter: "Abrigo médio", beachAxis: "Baía ampla ao norte" },
+  matadeiro: { depth: "Areia de enseada e foz de rio", shelter: "Abrigo moderado", beachAxis: "Enseada SE/SSE" },
+  armacao: { depth: "Areia protegida e mais suave", shelter: "Bastante abrigo", beachAxis: "Canto sul protegido" },
+  "lagoinha-do-leste": { depth: "Beachbreak remoto e exposto", shelter: "Pouco abrigo", beachAxis: "Enseada muito aberta SE/LSE" },
+};
+
+function localeTag() {
+  return state.lang === "pt" ? "pt-BR" : "en-US";
+}
+
+function t(key, ...args) {
+  const dict = UI[state.lang] ?? UI.pt;
+  const value = dict[key] ?? UI.pt[key] ?? key;
+  return typeof value === "function" ? value(...args) : value;
+}
+
+// Beach prose with PT override, English fallback from the BEACHES record.
+function tBeach(beach, field) {
+  if (state.lang === "pt") {
+    const pt = BEACH_PT[beach.id];
+    if (pt && pt[field] != null) return pt[field];
+  }
+  return beach[field];
+}
+
+// Spot-profile prose (depth / shelter / beachAxis) with PT override.
+function tProfile(beach, field) {
+  if (state.lang === "pt") {
+    const pt = PROFILE_PT[beach.id];
+    if (pt && pt[field] != null) return pt[field];
+  }
+  return spotDataProfile(beach)[field];
+}
+
+function setLang(lang) {
+  if (lang !== "pt" && lang !== "en") return;
+  state.lang = lang;
+  try {
+    window.localStorage.setItem("surf-lang", lang);
+  } catch (error) {
+    /* ignore storage failures */
+  }
+  document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
+  syncStaticChrome();
+  render();
+}
 
 const elements = {};
 
@@ -415,16 +630,55 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.timelinePanel = document.querySelector("#timelinePanel");
   elements.map = document.querySelector("#map");
   elements.fallbackMap = document.querySelector("#fallbackMap");
+  elements.langToggle = document.querySelector("#langToggle");
 
+  let stored = null;
+  try {
+    stored = window.localStorage.getItem("surf-lang");
+  } catch (error) {
+    /* ignore storage failures */
+  }
+  if (stored === "pt" || stored === "en") state.lang = stored;
+  document.documentElement.lang = state.lang === "pt" ? "pt-BR" : "en";
+
+  if (elements.langToggle) {
+    elements.langToggle.querySelectorAll("button[data-lang]").forEach((button) => {
+      button.addEventListener("click", () => setLang(button.dataset.lang));
+    });
+  }
+
+  syncStaticChrome();
   renderControls();
   initializeMap();
   renderLoading();
   loadForecasts();
 });
 
+// Updates the static page chrome (title, headings, control labels, footer,
+// language toggle state) that lives outside the data-driven render() pass.
+function syncStaticChrome() {
+  const h1 = document.querySelector(".brand h1");
+  if (h1) h1.textContent = t("h1");
+
+  const labels = document.querySelectorAll(".control-label");
+  if (labels[0]) labels[0].textContent = t("day");
+  if (labels[1]) labels[1].textContent = t("hour");
+
+  const footer = document.querySelector(".app-footer span");
+  if (footer) footer.textContent = t("footer");
+
+  updateStatusBar();
+
+  if (elements.langToggle) {
+    elements.langToggle.querySelectorAll("button[data-lang]").forEach((button) => {
+      button.setAttribute("aria-pressed", button.dataset.lang === state.lang);
+    });
+  }
+}
+
 function renderControls() {
   const days = [
-    { label: "Today", offset: 0 },
+    { label: t("today"), offset: 0 },
     { label: formatWeekday(1), offset: 1 },
     { label: formatWeekday(2), offset: 2 },
     { label: formatWeekday(3), offset: 3 },
@@ -551,7 +805,7 @@ function makeMarkerIcon(score) {
 }
 
 async function loadForecasts() {
-  updateStatus("loading", "Loading live forecast");
+  updateStatus("loading", t("loading"));
   state.loading = true;
   state.error = "";
 
@@ -564,17 +818,26 @@ async function loadForecasts() {
   }
 
   state.loading = false;
-
-  if (!fulfilled.length) {
-    state.error = "Forecast unavailable";
-    updateStatus("error", "Forecast unavailable");
-  } else if (fulfilled.length < BEACHES.length) {
-    updateStatus("error", `${fulfilled.length}/${BEACHES.length} beaches updated`);
-  } else {
-    updateStatus("ready", `Live forecast updated ${formatClock(new Date())}`);
-  }
-
+  state.lastUpdated = fulfilled.length ? new Date() : null;
+  state.loadedCount = fulfilled.length;
+  updateStatusBar();
   render();
+}
+
+// Renders the live-status pill in the current language (re-callable on toggle).
+function updateStatusBar() {
+  if (state.loading) {
+    updateStatus("loading", t("loading"));
+    return;
+  }
+  if (!state.loadedCount) {
+    state.error = "unavailable";
+    updateStatus("error", t("unavailable"));
+  } else if (state.loadedCount < BEACHES.length) {
+    updateStatus("error", t("partial", state.loadedCount, BEACHES.length));
+  } else {
+    updateStatus("ready", t("updated", formatClock(state.lastUpdated)));
+  }
 }
 
 async function fetchBeachForecast(beach) {
@@ -594,7 +857,7 @@ async function fetchBeachForecast(beach) {
     latitude: beach.lat,
     longitude: beach.lon,
     hourly:
-      "wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,wind_wave_height,wind_wave_direction,wind_wave_period,sea_level_height_msl,sea_surface_temperature",
+      "wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,secondary_swell_wave_height,secondary_swell_wave_direction,secondary_swell_wave_period,wind_wave_height,wind_wave_direction,wind_wave_period,sea_level_height_msl,sea_surface_temperature",
     timezone: TZ,
     forecast_days: "4",
     cell_selection: "sea",
@@ -659,15 +922,14 @@ function render() {
 }
 
 function renderLoading() {
-  elements.rankedList.innerHTML = '<div class="empty-state">Loading beaches</div>';
-  elements.selectedSummary.innerHTML = '<div class="empty-state">Loading forecast</div>';
+  elements.rankedList.innerHTML = `<div class="empty-state">${escapeHtml(t("loadingBeaches"))}</div>`;
+  elements.selectedSummary.innerHTML = `<div class="empty-state">${escapeHtml(t("loading"))}</div>`;
   elements.metricGrid.innerHTML = "";
-  elements.timelinePanel.innerHTML = '<div class="empty-state">Loading day window</div>';
+  elements.timelinePanel.innerHTML = `<div class="empty-state">${escapeHtml(t("loadingWindow"))}</div>`;
 }
 
 function renderError() {
-  elements.rankedList.innerHTML =
-    '<div class="empty-state">Forecast data is unavailable right now. Try refreshing in a minute.</div>';
+  elements.rankedList.innerHTML = `<div class="empty-state">${escapeHtml(t("errorState"))}</div>`;
   elements.selectedSummary.innerHTML = "";
   elements.metricGrid.innerHTML = "";
   elements.timelinePanel.innerHTML = "";
@@ -680,8 +942,8 @@ function renderTemperatureStrip() {
   const air = average(samples.map((item) => item.sample.temperature));
   const water = average(samples.map((item) => item.sample.seaTemperature));
   const label = samples.length
-    ? `${formatNumber(air, 0)}°C air · ${formatNumber(water, 0)}°C water`
-    : "Air -- · Water --";
+    ? t("airWater", formatNumber(air, 0), formatNumber(water, 0))
+    : t("airWaterEmpty");
 
   elements.tempStrip.innerHTML = `
     <span>${escapeHtml(formatDayHour(state.selectedDayOffset, state.selectedHour))}</span>
@@ -710,8 +972,7 @@ function renderSelectedSummary() {
   const scored = getScoredSample(beach, state.selectedDayOffset, state.selectedHour);
 
   if (!scored) {
-    elements.selectedSummary.innerHTML =
-      '<div class="empty-state">No forecast for this beach and hour.</div>';
+    elements.selectedSummary.innerHTML = `<div class="empty-state">${escapeHtml(t("noForecastHour"))}</div>`;
     elements.metricGrid.innerHTML = "";
     return;
   }
@@ -719,11 +980,11 @@ function renderSelectedSummary() {
   const score = scored.score;
   const badgeClass = pinClass(score.score);
   elements.selectedSummary.innerHTML = `
-    <span class="panel-eyebrow">Selected spot</span>
+    <span class="panel-eyebrow">${escapeHtml(t("selectedSpot"))}</span>
     <div class="summary-top">
       <div>
         <h2 class="beach-name">${escapeHtml(beach.name)}</h2>
-        <p class="beach-meta">${escapeHtml(formatDayHour(state.selectedDayOffset, state.selectedHour))} · ${escapeHtml(beach.breakType)}</p>
+        <p class="beach-meta">${escapeHtml(formatDayHour(state.selectedDayOffset, state.selectedHour))} · ${escapeHtml(tBeach(beach, "breakType"))}</p>
       </div>
       <div class="score-badge ${badgeClass}">
         <span class="score-number">${score.score}</span>
@@ -732,7 +993,7 @@ function renderSelectedSummary() {
     </div>
     <p class="spot-read">${escapeHtml(buildSpotRead(scored))}</p>
     <div class="trait-list">
-      ${beach.traits.map((trait) => `<span>${escapeHtml(trait)}</span>`).join("")}
+      ${tBeach(beach, "traits").map((trait) => `<span>${escapeHtml(trait)}</span>`).join("")}
     </div>
     <ul class="reason-list">
       ${score.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
@@ -752,7 +1013,7 @@ function renderMetrics(scored) {
   const metrics = [
     {
       icon: "waves",
-      label: "Swell",
+      label: t("swell"),
       value: `${formatNumber(sample.swellHeight ?? sample.waveHeight, 1)} m · ${formatNumber(sample.swellPeriod ?? sample.wavePeriod, 1)} s`,
       sub: `${degToCompass(sample.swellDirection ?? sample.waveDirection)} ${formatDegrees(sample.swellDirection ?? sample.waveDirection)}`,
       detail: swellRead.detail,
@@ -760,15 +1021,15 @@ function renderMetrics(scored) {
     },
     {
       icon: "air",
-      label: "Wind",
+      label: t("wind"),
       value: `${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)} km/h`,
-      sub: `${score.windQuality} · gust ${formatNumber(sample.windGusts, 0)} km/h`,
+      sub: `${score.windQuality} · ${t("gust")} ${formatNumber(sample.windGusts, 0)} km/h`,
       detail: windRead.detail,
       tone: partTone(score.parts.wind),
     },
     {
       icon: "water",
-      label: "Tide",
+      label: t("tide"),
       value: `${formatSigned(sample.seaLevel)} m`,
       sub: `${score.tideTrend} · ${score.tideQuality}`,
       detail: tideRead.detail,
@@ -776,9 +1037,9 @@ function renderMetrics(scored) {
     },
     {
       icon: "wb_sunny",
-      label: "Weather",
-      value: `${formatNumber(sample.temperature, 0)}°C · ${formatNumber(sample.precipitationProbability, 0)}% rain`,
-      sub: `${formatNumber(sample.cloudCover, 0)}% cloud · ${formatNumber(sample.seaTemperature, 0)}°C water`,
+      label: t("weather"),
+      value: `${formatNumber(sample.temperature, 0)}°C · ${formatNumber(sample.precipitationProbability, 0)}% ${t("rain")}`,
+      sub: `${formatNumber(sample.cloudCover, 0)}% ${t("cloud")} · ${formatNumber(sample.seaTemperature, 0)}°C ${t("water")}`,
       detail: weatherRead.detail,
       tone: partTone(score.parts.weather),
     },
@@ -807,8 +1068,7 @@ function renderRankedList() {
     .sort((a, b) => b.scored.score.score - a.scored.score.score);
 
   if (!scoredBeaches.length) {
-    elements.rankedList.innerHTML =
-      '<div class="empty-state">No forecast for this day and hour yet.</div>';
+    elements.rankedList.innerHTML = `<div class="empty-state">${escapeHtml(t("noForecastWindow"))}</div>`;
     return;
   }
 
@@ -817,7 +1077,7 @@ function renderRankedList() {
 
   elements.rankedList.innerHTML = `
     <div class="section-head">
-      <h2><span class="head-icon material-symbols-rounded" aria-hidden="true">surfing</span>Best bets</h2>
+      <h2><span class="head-icon material-symbols-rounded" aria-hidden="true">surfing</span>${escapeHtml(t("bestBets"))}</h2>
       <span>${escapeHtml(title)}</span>
     </div>
     ${renderTopBet(top)}
@@ -842,7 +1102,7 @@ function renderTopBet({ beach, scored }) {
     <button class="bet-hero tier-${tier}" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}">
       <span class="bet-hero-score ${pinClass(score)}">${score}</span>
       <span class="bet-hero-body">
-        <span class="bet-hero-tag">Top pick · ${escapeHtml(scored.score.label)}</span>
+        <span class="bet-hero-tag">${escapeHtml(t("topPick", scored.score.label))}</span>
         <span class="bet-hero-name">${escapeHtml(beach.name)}</span>
         <span class="bet-hero-read">${escapeHtml(compactSessionRead(scored))}</span>
         <span class="bet-hero-stats">
@@ -879,7 +1139,7 @@ function renderTimeline() {
 
   elements.timelinePanel.innerHTML = `
     <div class="section-head">
-      <h2><span class="head-icon material-symbols-rounded" aria-hidden="true">schedule</span>Hour by hour</h2>
+      <h2><span class="head-icon material-symbols-rounded" aria-hidden="true">schedule</span>${escapeHtml(t("hourByHour"))}</h2>
       <span>${escapeHtml(beach.name)} · ${escapeHtml(formatDay(state.selectedDayOffset))}</span>
     </div>
     <div class="timeline">
@@ -917,21 +1177,31 @@ function renderTimeline() {
 }
 
 function buildSpotRead(scored) {
-  const swellRead = describeSwell(scored.beach, scored.sample);
-  const windRead = describeWind(scored.beach, scored.sample);
-  const coastalRead = describeCoastalFit(scored.beach, scored.sample, scored.score.parts.coastal);
-  const tideRead = describeTide(scored.beach, scored.sample, scored.score);
+  const swell = describeSwell(scored.beach, scored.sample).short;
+  const wind = describeWind(scored.beach, scored.sample).short;
+  const coastal = describeCoastalFit(scored.beach, scored.sample, scored.score.parts.coastal).short;
+  const tide = describeTide(scored.beach, scored.sample, scored.score).short;
+  const score = scored.score.score;
+  const pt = state.lang === "pt";
 
-  if (scored.score.score >= 80) {
-    return `Strong call: ${swellRead.short}. ${windRead.short}. ${coastalRead.short}.`;
+  if (score >= 80) {
+    return pt
+      ? `Pode ir: ${swell}. ${wind}. ${coastal}.`
+      : `Strong call: ${swell}. ${wind}. ${coastal}.`;
   }
-  if (scored.score.score >= 66) {
-    return `Worth checking: ${swellRead.short}. ${windRead.short}. ${coastalRead.short}.`;
+  if (score >= 66) {
+    return pt
+      ? `Vale conferir: ${swell}. ${wind}. ${coastal}.`
+      : `Worth checking: ${swell}. ${wind}. ${coastal}.`;
   }
-  if (scored.score.score >= 52) {
-    return `Possible but selective: ${swellRead.short}. ${windRead.short}. ${tideRead.short}.`;
+  if (score >= 52) {
+    return pt
+      ? `Dá pra surfar, mas seletivo: ${swell}. ${wind}. ${tide}.`
+      : `Possible but selective: ${swell}. ${wind}. ${tide}.`;
   }
-  return `Probably a compromised session: ${swellRead.short}. ${windRead.short}. ${tideRead.short}.`;
+  return pt
+    ? `Sessão provavelmente comprometida: ${swell}. ${wind}. ${tide}.`
+    : `Probably a compromised session: ${swell}. ${wind}. ${tide}.`;
 }
 
 function compactSessionRead(scored) {
@@ -946,175 +1216,281 @@ function compactSessionRead(scored) {
   };
 
   if (scored.score.score >= 66) {
-    return `${scored.score.label}: ${reads[support.key]}. Watch ${limiting.label.toLowerCase()}.`;
+    return state.lang === "pt"
+      ? `${scored.score.label}: ${reads[support.key]}. Fique de olho: ${limiting.label}.`
+      : `${scored.score.label}: ${reads[support.key]}. Watch ${limiting.label}.`;
   }
-
   return `${scored.score.label}: ${reads[limiting.key]}.`;
 }
+
+const SWELL_PROSE = {
+  en: {
+    height: {
+      missing: "size data is missing",
+      small: "small for this beach",
+      under: "a little under this beach's preferred size",
+      inRange: "inside this beach's preferred size",
+      above: "above ideal but still within range",
+      big: "bigger than this spot usually handles well",
+    },
+    period: {
+      missing: "period unavailable",
+      short: "short-period and less organized",
+      mid: "organized enough for clean lines",
+      long: "long-period with extra push and wrap",
+    },
+    dir: {
+      missing: "direction unavailable",
+      well: "well aimed at this beach",
+      usable: "usable but not perfect for this beach",
+      outside: "mostly outside this beach's best angle",
+    },
+  },
+  pt: {
+    height: {
+      missing: "sem leitura de tamanho",
+      small: "pequeno para esta praia",
+      under: "um pouco abaixo do tamanho ideal daqui",
+      inRange: "no tamanho ideal daqui",
+      above: "acima do ideal, mas ainda na faixa",
+      big: "maior do que esta praia costuma segurar bem",
+    },
+    period: {
+      missing: "indisponível",
+      short: "curto e menos organizado",
+      mid: "bom o bastante para linhas limpas",
+      long: "longo, com mais força e encaixe",
+    },
+    dir: {
+      missing: "indisponível",
+      well: "bem direcionado para esta praia",
+      usable: "aproveitável, mas não perfeito para esta praia",
+      outside: "fora do melhor ângulo desta praia",
+    },
+  },
+};
 
 function describeSwell(beach, sample) {
   const height = sample.swellHeight ?? sample.waveHeight;
   const period = sample.swellPeriod ?? sample.wavePeriod;
   const direction = sample.swellDirection ?? sample.waveDirection;
   const directionDiff = angularDiff(direction, beach.swellCenter);
+  const f = SWELL_PROSE[state.lang] ?? SWELL_PROSE.pt;
 
-  let heightText = "size data is missing";
+  let heightKey = "missing";
   if (Number.isFinite(height)) {
-    if (height < beach.idealHeight[0] * 0.65) {
-      heightText = "small for this beach";
-    } else if (height < beach.idealHeight[0]) {
-      heightText = "a little under this beach's preferred size";
-    } else if (height <= beach.idealHeight[1]) {
-      heightText = "inside this beach's preferred size";
-    } else if (height < beach.maxHeight) {
-      heightText = "above ideal but still within range";
-    } else {
-      heightText = "bigger than this spot usually handles well";
-    }
+    if (height < beach.idealHeight[0] * 0.65) heightKey = "small";
+    else if (height < beach.idealHeight[0]) heightKey = "under";
+    else if (height <= beach.idealHeight[1]) heightKey = "inRange";
+    else if (height < beach.maxHeight) heightKey = "above";
+    else heightKey = "big";
   }
 
-  let periodText = "period data is missing";
+  let periodKey = "missing";
   if (Number.isFinite(period)) {
-    if (period < 8) {
-      periodText = "short-period and less organized";
-    } else if (period <= 14) {
-      periodText = "organized enough for clean lines";
-    } else {
-      periodText = "long-period with extra push and wrap";
-    }
+    periodKey = period < 8 ? "short" : period <= 14 ? "mid" : "long";
   }
 
-  let directionText = "direction data is missing";
+  let dirKey = "missing";
   if (Number.isFinite(direction)) {
-    if (directionDiff <= beach.swellSpread * 0.35) {
-      directionText = "well aimed at this beach";
-    } else if (directionDiff <= beach.swellSpread * 0.75) {
-      directionText = "usable but not perfect for this beach";
-    } else {
-      directionText = "mostly outside this beach's best angle";
-    }
+    if (directionDiff <= beach.swellSpread * 0.35) dirKey = "well";
+    else if (directionDiff <= beach.swellSpread * 0.75) dirKey = "usable";
+    else dirKey = "outside";
   }
+
+  const h = f.height[heightKey];
+  const p = f.period[periodKey];
+  const d = f.dir[dirKey];
+  const window = compassWindow(beach.swellCenter, beach.swellSpread);
 
   return {
-    short: `${heightText}; ${periodText}; ${directionText}`,
-    detail: `The swell is ${heightText}. The period is ${periodText}. The direction is ${directionText} against a ${compassWindow(
-      beach.swellCenter,
-      beach.swellSpread,
-    )} target window.`,
+    short: `${h}; ${p}; ${d}`,
+    detail:
+      state.lang === "pt"
+        ? `O swell está ${h}. O período está ${p}. A direção está ${d}, considerando a janela ideal de ${window}.`
+        : `The swell is ${h}. The period is ${p}. The direction is ${d} against a ${window} target window.`,
   };
 }
+
+const WIND_PROSE = {
+  en: {
+    angle: {
+      unclear: "wind angle is unclear",
+      offshore: "offshore here, so it should groom the wave face",
+      crossoff: "cross-offshore here, still generally helpful",
+      crosson: "cross-onshore here, so expect some texture",
+      onshore: "onshore here, so chop is the main concern",
+    },
+    speed: { unclear: "unclear", light: "light", moderate: "moderate", noticeable: "noticeable", strong: "strong" },
+    gust: " Gusts run well above the base wind, so the surface may pulse.",
+  },
+  pt: {
+    angle: {
+      unclear: "ângulo do vento indefinido",
+      offshore: "terral aqui, deve alisar a parede da onda",
+      crossoff: "terral lateral aqui, ainda costuma ajudar",
+      crosson: "maral lateral aqui, espere um pouco de textura",
+      onshore: "maral aqui, então a bagunça é a preocupação",
+    },
+    speed: { unclear: "indefinido", light: "fraco", moderate: "moderado", noticeable: "perceptível", strong: "forte" },
+    gust: " As rajadas estão bem acima do vento médio, então a superfície pode pulsar.",
+  },
+};
 
 function describeWind(beach, sample) {
   const speed = sample.windSpeed;
   const gusts = sample.windGusts;
   const directionDiff = angularDiff(sample.windDirection, beach.offshoreWind);
+  const f = WIND_PROSE[state.lang] ?? WIND_PROSE.pt;
 
-  let angleText = "wind angle is unclear";
+  let angleKey = "unclear";
   if (Number.isFinite(sample.windDirection)) {
-    if (directionDiff <= 45) {
-      angleText = "offshore here, so it should groom the wave face";
-    } else if (directionDiff <= 95) {
-      angleText = "cross-offshore here, still generally helpful";
-    } else if (directionDiff <= 135) {
-      angleText = "cross-onshore here, so expect some texture";
-    } else {
-      angleText = "onshore here, so chop is the main concern";
-    }
+    if (directionDiff <= 45) angleKey = "offshore";
+    else if (directionDiff <= 95) angleKey = "crossoff";
+    else if (directionDiff <= 135) angleKey = "crosson";
+    else angleKey = "onshore";
   }
 
-  let speedText = "wind strength is unclear";
+  let speedKey = "unclear";
   if (Number.isFinite(speed)) {
-    if (speed <= 7) {
-      speedText = "light";
-    } else if (speed <= 15) {
-      speedText = "moderate";
-    } else if (speed <= 26) {
-      speedText = "noticeable";
-    } else {
-      speedText = "strong";
-    }
+    speedKey = speed <= 7 ? "light" : speed <= 15 ? "moderate" : speed <= 26 ? "noticeable" : "strong";
   }
 
+  const angleText = f.angle[angleKey];
+  const speedText = f.speed[speedKey];
   const gustText =
-    Number.isFinite(gusts) && Number.isFinite(speed) && gusts - speed >= 12
-      ? " Gusts are meaningfully above the base wind, so the surface may pulse."
-      : "";
+    Number.isFinite(gusts) && Number.isFinite(speed) && gusts - speed >= 12 ? f.gust : "";
+  const compass = degToCompass(sample.windDirection);
 
   return {
-    short: `${speedText} ${angleText}`,
-    detail: `${degToCompass(sample.windDirection)} wind is ${angleText}. The speed is ${speedText} for surfing.${gustText}`,
+    short: state.lang === "pt" ? `vento ${speedText}, ${angleText}` : `${speedText} ${angleText}`,
+    detail:
+      state.lang === "pt"
+        ? `Vento de ${compass}, ${angleText}. O vento está ${speedText} para o surfe.${gustText}`
+        : `${compass} wind is ${angleText}. The speed is ${speedText} for surfing.${gustText}`,
   };
 }
 
 function describeCoastalFit(beach, sample, coastalScore) {
   const profile = spotDataProfile(beach);
-  const height = sample.swellHeight ?? sample.waveHeight;
-  const period = sample.swellPeriod ?? sample.wavePeriod;
   const direction = sample.swellDirection ?? sample.waveDirection;
   const angleFit = directionWindowScore(direction, beach.swellCenter, beach.swellSpread);
-  const energy = swellEnergy(height, period);
+  const energy = swellEnergy(sample.swellHeight ?? sample.waveHeight, sample.swellPeriod ?? sample.wavePeriod);
+  const pt = state.lang === "pt";
 
-  let scoreText = "coastal fit is uncertain";
+  let scoreKey = "uncertain";
   if (Number.isFinite(coastalScore)) {
-    if (coastalScore >= 76) {
-      scoreText = "coastal shape supports the forecast";
-    } else if (coastalScore >= 52) {
-      scoreText = "coastal shape is workable but selective";
-    } else {
-      scoreText = "coastal shape is filtering or distorting the forecast";
-    }
+    scoreKey = coastalScore >= 76 ? "supports" : coastalScore >= 52 ? "workable" : "filtering";
   }
+  const scoreText = pt
+    ? {
+        uncertain: "encaixe da costa incerto",
+        supports: "o formato da costa favorece a previsão",
+        workable: "o formato da costa dá, mas é seletivo",
+        filtering: "o formato da costa filtra ou distorce a previsão",
+      }[scoreKey]
+    : {
+        uncertain: "coastal fit is uncertain",
+        supports: "coastal shape supports the forecast",
+        workable: "coastal shape is workable but selective",
+        filtering: "coastal shape is filtering or distorting the forecast",
+      }[scoreKey];
 
-  const shelterText =
-    profile.shelterIndex >= 0.62
-      ? "This beach is sheltered, so it needs better alignment or more energy."
-      : profile.shelterIndex <= 0.25
-        ? "This beach is exposed, so raw swell and wind show up quickly."
-        : "This beach has partial shelter, so one corner can differ from another.";
+  const shelterKey =
+    profile.shelterIndex >= 0.62 ? "sheltered" : profile.shelterIndex <= 0.25 ? "exposed" : "partial";
+  const shelterText = pt
+    ? {
+        sheltered: "Esta praia é abrigada, então precisa de mais alinhamento ou energia.",
+        exposed: "Esta praia é exposta, então swell cru e vento aparecem rápido.",
+        partial: "Esta praia tem abrigo parcial, então um canto pode diferir do outro.",
+      }[shelterKey]
+    : {
+        sheltered: "This beach is sheltered, so it needs better alignment or more energy.",
+        exposed: "This beach is exposed, so raw swell and wind show up quickly.",
+        partial: "This beach has partial shelter, so one corner can differ from another.",
+      }[shelterKey];
+
+  const energyWord = pt
+    ? energy >= 0.68
+      ? "alta"
+      : energy >= 0.38
+        ? "moderada"
+        : "baixa"
+    : energy >= 0.68
+      ? "high"
+      : energy >= 0.38
+        ? "moderate"
+        : "low";
 
   return {
-    short: `${scoreText} for this beach's ${profile.depth.toLowerCase()}`,
-    detail: `${scoreText}. Energy is ${energy >= 0.68 ? "high" : energy >= 0.38 ? "moderate" : "low"} and angle fit is ${Math.round(
-      angleFit * 100,
-    )}%. ${shelterText}`,
+    short: scoreText,
+    detail: pt
+      ? `${scoreText}. A energia está ${energyWord} e o encaixe de ângulo é ${Math.round(angleFit * 100)}%. ${shelterText}`
+      : `${scoreText}. Energy is ${energyWord} and angle fit is ${Math.round(angleFit * 100)}%. ${shelterText}`,
   };
 }
 
 function describeTide(beach, sample, score) {
   const tideDiff = Math.abs((sample.seaLevel ?? 0) - beach.idealTide);
-  let fitText = "tide fit is unclear";
+  const pt = state.lang === "pt";
 
+  let fitKey = "unclear";
   if (Number.isFinite(sample.seaLevel)) {
-    if (tideDiff <= beach.tideSpread * 0.25) {
-      fitText = "very close to this beach's preferred tide";
-    } else if (tideDiff <= beach.tideSpread * 0.55) {
-      fitText = "close enough to this beach's preferred tide";
-    } else if (tideDiff <= beach.tideSpread) {
-      fitText = "on the edge of this beach's preferred tide";
-    } else {
-      fitText = "outside this beach's preferred tide";
-    }
+    if (tideDiff <= beach.tideSpread * 0.25) fitKey = "veryClose";
+    else if (tideDiff <= beach.tideSpread * 0.55) fitKey = "close";
+    else if (tideDiff <= beach.tideSpread) fitKey = "edge";
+    else fitKey = "outside";
   }
+  const fitText = pt
+    ? {
+        unclear: "encaixe de maré incerto",
+        veryClose: "bem perto da maré ideal daqui",
+        close: "perto o bastante da maré ideal daqui",
+        edge: "no limite da maré ideal daqui",
+        outside: "fora da maré ideal daqui",
+      }[fitKey]
+    : {
+        unclear: "tide fit is unclear",
+        veryClose: "very close to this beach's preferred tide",
+        close: "close enough to this beach's preferred tide",
+        edge: "on the edge of this beach's preferred tide",
+        outside: "outside this beach's preferred tide",
+      }[fitKey];
+
+  const trend = score.tideTrend.toLowerCase();
 
   return {
-    short: `${score.tideTrend.toLowerCase()} tide is ${fitText}`,
-    detail: `The model target here is around ${formatSigned(beach.idealTide)} m. Current sea level is ${formatSigned(
-      sample.seaLevel,
-    )} m, ${score.tideTrend.toLowerCase()}, and ${fitText}.`,
+    short: pt ? `maré ${trend}, ${fitText}` : `${trend} tide is ${fitText}`,
+    detail: pt
+      ? `O alvo do modelo aqui fica por volta de ${formatSigned(beach.idealTide)} m. O nível atual é ${formatSigned(sample.seaLevel)} m, ${trend}, e ${fitText}.`
+      : `The model target here is around ${formatSigned(beach.idealTide)} m. Current sea level is ${formatSigned(sample.seaLevel)} m, ${trend}, and ${fitText}.`,
   };
 }
 
 function describeWeather(sample) {
   const rain = sample.precipitationProbability ?? 0;
   const cloud = sample.cloudCover ?? 0;
-  const rainText =
-    rain >= 60
+  const pt = state.lang === "pt";
+
+  const rainText = pt
+    ? rain >= 60
+      ? "chuva provável"
+      : rain >= 35
+        ? "pancadas possíveis"
+        : "chuva não é grande preocupação"
+    : rain >= 60
       ? "rain is likely"
       : rain >= 35
         ? "showers are possible"
         : "rain is not a major concern";
-  const cloudText =
-    cloud >= 75
+
+  const cloudText = pt
+    ? cloud >= 75
+      ? "bastante nublado"
+      : cloud >= 40
+        ? "parcialmente nublado"
+        : "bem claro"
+    : cloud >= 75
       ? "mostly cloudy"
       : cloud >= 40
         ? "partly cloudy"
@@ -1122,7 +1498,9 @@ function describeWeather(sample) {
 
   return {
     short: `${rainText}; ${cloudText}`,
-    detail: `Weather mostly changes comfort, visibility, and wind confidence. For this hour, ${rainText} and it looks ${cloudText}.`,
+    detail: pt
+      ? `O tempo afeta mais o conforto, a visibilidade e a confiança no vento. Neste horário, ${rainText} e o céu está ${cloudText}.`
+      : `Weather mostly changes comfort, visibility, and wind confidence. For this hour, ${rainText} and it looks ${cloudText}.`,
   };
 }
 
@@ -1142,8 +1520,8 @@ function renderNearbyContrast(beach, selectedScored) {
   return `
     <div class="nearby-contrast">
       <div class="section-head contrast-head">
-        <h3><span class="head-icon material-symbols-rounded" aria-hidden="true">near_me</span>Closest spots</h3>
-        <span>tap to compare</span>
+        <h3><span class="head-icon material-symbols-rounded" aria-hidden="true">near_me</span>${escapeHtml(t("closestSpots"))}</h3>
+        <span>${escapeHtml(t("tapToCompare"))}</span>
       </div>
       <div class="contrast-list">
         ${nearby
@@ -1151,7 +1529,7 @@ function renderNearbyContrast(beach, selectedScored) {
             const delta = selectedScored.score.score - scored.score.score;
             const deltaText =
               Math.abs(delta) <= 2
-                ? "Nearly tied"
+                ? t("nearlyTied")
                 : delta > 0
                   ? `${selectedScored.beach.name} +${Math.abs(delta)}`
                   : `${otherBeach.name} +${Math.abs(delta)}`;
@@ -1162,7 +1540,7 @@ function renderNearbyContrast(beach, selectedScored) {
                 <div class="contrast-copy">
                   <div>
                     <strong>${escapeHtml(otherBeach.name)}</strong>
-                    <span>${escapeHtml(formatDistance(distance))} away · ${escapeHtml(deltaText)}</span>
+                    <span>${escapeHtml(formatDistance(distance))} ${escapeHtml(t("away"))} · ${escapeHtml(deltaText)}</span>
                   </div>
                   <p>${escapeHtml(contrastReason(selectedScored, scored))}</p>
                 </div>
@@ -1186,7 +1564,7 @@ function contrastReason(selectedScored, otherScored) {
     .sort((a, b) => b.impact - a.impact)[0];
 
   if (!factor || factor.impact < 1.5) {
-    return selectedScored.beach.whyNearby;
+    return tBeach(selectedScored.beach, "whyNearby");
   }
 
   if (factor.key === "swell") {
@@ -1201,7 +1579,9 @@ function contrastReason(selectedScored, otherScored) {
   if (factor.key === "tide") {
     return tideContrastReason(selectedScored, otherScored);
   }
-  return "The weather grid is slightly different here, but swell and wind still matter more than rain or cloud.";
+  return state.lang === "pt"
+    ? "O tempo varia um pouco aqui, mas swell e vento ainda pesam mais que chuva ou nuvem."
+    : "The weather grid is slightly different here, but swell and wind still matter more than rain or cloud.";
 }
 
 function swellContrastReason(selectedScored, otherScored) {
@@ -1209,23 +1589,30 @@ function swellContrastReason(selectedScored, otherScored) {
   const otherDirection = otherScored.sample.swellDirection ?? otherScored.sample.waveDirection;
   const selectedDiff = angularDiff(selectedDirection, selectedScored.beach.swellCenter);
   const otherDiff = angularDiff(otherDirection, otherScored.beach.swellCenter);
+  const pt = state.lang === "pt";
 
   if (Math.abs(selectedDiff - otherDiff) >= 10) {
     const better = selectedDiff < otherDiff ? selectedScored : otherScored;
     const worse = selectedDiff < otherDiff ? otherScored : selectedScored;
-    return `Swell angle fits ${better.beach.name} better: about ${Math.round(
-      Math.min(selectedDiff, otherDiff),
-    )}° off its target versus ${Math.round(Math.max(selectedDiff, otherDiff))}° at ${worse.beach.name}.`;
+    const min = Math.round(Math.min(selectedDiff, otherDiff));
+    const max = Math.round(Math.max(selectedDiff, otherDiff));
+    return pt
+      ? `O ângulo do swell encaixa melhor em ${better.beach.name}: cerca de ${min}° fora do alvo, contra ${max}° em ${worse.beach.name}.`
+      : `Swell angle fits ${better.beach.name} better: about ${min}° off its target versus ${max}° at ${worse.beach.name}.`;
   }
 
   const selectedHeight = selectedScored.sample.swellHeight ?? selectedScored.sample.waveHeight;
   const otherHeight = otherScored.sample.swellHeight ?? otherScored.sample.waveHeight;
   if (Number.isFinite(selectedHeight) && Number.isFinite(otherHeight) && Math.abs(selectedHeight - otherHeight) >= 0.15) {
     const bigger = selectedHeight > otherHeight ? selectedScored : otherScored;
-    return `The marine grid shows more swell reaching ${bigger.beach.name}, which can happen when nearby beaches face the same swell at different angles.`;
+    return pt
+      ? `O modelo mostra mais swell chegando em ${bigger.beach.name}, o que acontece quando praias próximas pegam o mesmo swell em ângulos diferentes.`
+      : `The marine grid shows more swell reaching ${bigger.beach.name}, which can happen when nearby beaches face the same swell at different angles.`;
   }
 
-  return "The main split is swell fit: each beach has a different preferred direction and sandbar exposure.";
+  return pt
+    ? "A diferença principal é o encaixe do swell: cada praia tem direção preferida e exposição de banco diferentes."
+    : "The main split is swell fit: each beach has a different preferred direction and sandbar exposure.";
 }
 
 function windContrastReason(selectedScored, otherScored) {
@@ -1233,10 +1620,12 @@ function windContrastReason(selectedScored, otherScored) {
   const otherDiff = angularDiff(otherScored.sample.windDirection, otherScored.beach.offshoreWind);
   const better = selectedDiff < otherDiff ? selectedScored : otherScored;
   const worse = selectedDiff < otherDiff ? otherScored : selectedScored;
+  const min = Math.round(Math.min(selectedDiff, otherDiff));
+  const max = Math.round(Math.max(selectedDiff, otherDiff));
 
-  return `Wind is closer to offshore at ${better.beach.name}; it is about ${Math.round(
-    Math.min(selectedDiff, otherDiff),
-  )}° off there versus ${Math.round(Math.max(selectedDiff, otherDiff))}° at ${worse.beach.name}.`;
+  return state.lang === "pt"
+    ? `O vento está mais terral em ${better.beach.name}: cerca de ${min}° fora lá, contra ${max}° em ${worse.beach.name}.`
+    : `Wind is closer to offshore at ${better.beach.name}; it is about ${min}° off there versus ${max}° at ${worse.beach.name}.`;
 }
 
 function coastalContrastReason(selectedScored, otherScored) {
@@ -1246,9 +1635,13 @@ function coastalContrastReason(selectedScored, otherScored) {
     selectedScored.score.parts.coastal >= otherScored.score.parts.coastal
       ? selectedScored
       : otherScored;
-  const betterProfile = spotDataProfile(better.beach);
+  const depth = tProfile(better.beach, "depth").toLowerCase();
+  const shelter = tProfile(better.beach, "shelter").toLowerCase();
+  const sameAxis = selectedProfile.beachAxis === otherProfile.beachAxis;
 
-  return `${better.beach.name} has the better coastal fit here: ${betterProfile.depth.toLowerCase()}, ${betterProfile.shelter.toLowerCase()}, and its angle handles this swell more cleanly than ${selectedProfile.beachAxis === otherProfile.beachAxis ? "the nearby profile" : "the other beach axis"}.`;
+  return state.lang === "pt"
+    ? `${better.beach.name} tem o melhor encaixe de costa aqui: ${depth}, ${shelter}, e seu ângulo segura este swell melhor que ${sameAxis ? "o perfil vizinho" : "o outro eixo de praia"}.`
+    : `${better.beach.name} has the better coastal fit here: ${depth}, ${shelter}, and its angle handles this swell more cleanly than ${sameAxis ? "the nearby profile" : "the other beach axis"}.`;
 }
 
 function tideContrastReason(selectedScored, otherScored) {
@@ -1256,7 +1649,9 @@ function tideContrastReason(selectedScored, otherScored) {
   const otherDiff = Math.abs((otherScored.sample.seaLevel ?? 0) - otherScored.beach.idealTide);
   const better = selectedDiff < otherDiff ? selectedScored : otherScored;
 
-  return `The tide is closer to ${better.beach.name}'s rough target. Nearby beaches can prefer different water depth over their sandbars.`;
+  return state.lang === "pt"
+    ? `A maré está mais perto do alvo de ${better.beach.name}. Praias próximas podem preferir profundidades diferentes sobre seus bancos.`
+    : `The tide is closer to ${better.beach.name}'s rough target. Nearby beaches can prefer different water depth over their sandbars.`;
 }
 
 function limitingFactor(parts) {
@@ -1278,12 +1673,16 @@ function supportFactor(parts) {
 }
 
 function weightedFactors(parts) {
+  const labels =
+    state.lang === "pt"
+      ? { swell: "o swell", wind: "o vento", coastal: "o encaixe da costa", tide: "a maré", weather: "o tempo" }
+      : { swell: "swell fit", wind: "wind", coastal: "coastal fit", tide: "tide", weather: "weather" };
   return [
-    { key: "swell", label: "swell fit", value: parts.swell, weight: SCORE_WEIGHTS.swell },
-    { key: "wind", label: "wind", value: parts.wind, weight: SCORE_WEIGHTS.wind },
-    { key: "coastal", label: "coastal fit", value: parts.coastal, weight: SCORE_WEIGHTS.coastal },
-    { key: "tide", label: "tide", value: parts.tide, weight: SCORE_WEIGHTS.tide },
-    { key: "weather", label: "weather", value: parts.weather, weight: SCORE_WEIGHTS.weather },
+    { key: "swell", label: labels.swell, value: parts.swell, weight: SCORE_WEIGHTS.swell },
+    { key: "wind", label: labels.wind, value: parts.wind, weight: SCORE_WEIGHTS.wind },
+    { key: "coastal", label: labels.coastal, value: parts.coastal, weight: SCORE_WEIGHTS.coastal },
+    { key: "tide", label: labels.tide, value: parts.tide, weight: SCORE_WEIGHTS.tide },
+    { key: "weather", label: labels.weather, value: parts.weather, weight: SCORE_WEIGHTS.weather },
   ];
 }
 
@@ -1350,6 +1749,11 @@ function getScoredSample(beach, dayOffset, hour) {
     swellHeight: valueAt(forecast.marine, "swell_wave_height", marineIndex),
     swellDirection: valueAt(forecast.marine, "swell_wave_direction", marineIndex),
     swellPeriod: valueAt(forecast.marine, "swell_wave_period", marineIndex),
+    secondarySwellHeight: valueAt(forecast.marine, "secondary_swell_wave_height", marineIndex),
+    secondarySwellDirection: valueAt(forecast.marine, "secondary_swell_wave_direction", marineIndex),
+    secondarySwellPeriod: valueAt(forecast.marine, "secondary_swell_wave_period", marineIndex),
+    windWaveHeight: valueAt(forecast.marine, "wind_wave_height", marineIndex),
+    windWavePeriod: valueAt(forecast.marine, "wind_wave_period", marineIndex),
     seaLevel: valueAt(forecast.marine, "sea_level_height_msl", marineIndex),
     seaTemperature: valueAt(forecast.marine, "sea_surface_temperature", marineIndex),
   };
@@ -1364,75 +1768,141 @@ function getScoredSample(beach, dayOffset, hour) {
   };
 }
 
+// Deep-water energy flux is proportional to H^2 * T. We keep the proportional
+// term and normalize against a reference, rather than the linear height-fit the
+// prototype used. ENERGY_REF ~= a very good Floripa day (1.8 m @ ~12 s clean swell).
+const ENERGY_REF = 30;
+
+function waveEnergy(height, period) {
+  if (!Number.isFinite(height) || !Number.isFinite(period) || height <= 0 || period <= 0) {
+    return 0;
+  }
+  return height * height * period;
+}
+
+// Period-quality curve: windsea below ~8 s, solid groundswell 10-13 s, premium 13 s+.
+function periodCurve(period) {
+  if (!Number.isFinite(period)) return 0.45;
+  if (period <= 6) return 0.1;
+  if (period <= 8) return 0.1 + (period - 6) * 0.15; // 0.10 -> 0.40
+  if (period <= 10) return 0.4 + (period - 8) * 0.15; // 0.40 -> 0.70
+  if (period <= 13) return 0.7 + (period - 10) * 0.0833; // 0.70 -> 0.95
+  if (period <= 16) return 0.95 + (period - 13) * 0.0167; // 0.95 -> 1.00
+  return 1;
+}
+
+// Multiplicative wind gate (0..1): glassy and light-offshore groom the face;
+// onshore wind degrades steeply past ~9 km/h; strong wind from any direction caps it.
+function windQualityFactor(beach, sample) {
+  const speed = sample.windSpeed;
+  const gusts = sample.windGusts;
+  if (!Number.isFinite(speed)) return 0.6;
+  if (speed < 4) return 1; // glassy
+
+  const off = angularDiff(sample.windDirection, beach.offshoreWind); // 0 offshore .. 180 onshore
+  const dirComp = Math.cos((off * Math.PI) / 180); // +1 offshore .. -1 onshore
+
+  let factor;
+  if (dirComp >= 0) {
+    const groom = (dirComp * Math.min(speed, 20)) / 20; // builds to ~12-20 km/h
+    const tooStrong = Math.max(0, speed - 30) / 40; // strong offshore over-holds / bumps
+    factor = clamp(0.8 + 0.2 * groom - 0.3 * tooStrong, 0, 1);
+  } else {
+    const onshore = -dirComp; // 0..1
+    const severity = clamp((speed - 9) / 19, 0, 1); // ~no harm < 9, severe by ~28 km/h
+    factor = clamp(1 - onshore * (0.25 + 0.75 * severity), 0, 1);
+  }
+
+  const gustSpread = Math.max(0, (Number.isFinite(gusts) ? gusts : speed) - speed);
+  factor *= clamp(1 - gustSpread / 40, 0, 1);
+
+  if (speed > 45) factor = Math.min(factor, 0.25); // strong wind, any direction
+  return clamp(factor, 0, 1);
+}
+
 function scoreSample(beach, sample, dayOffset) {
-  const height = sample.swellHeight ?? sample.waveHeight ?? 0;
-  const period = sample.swellPeriod ?? sample.wavePeriod ?? 0;
+  const swellHeight = sample.swellHeight ?? sample.waveHeight ?? 0;
+  const swellPeriod = sample.swellPeriod ?? sample.wavePeriod ?? 0;
   const swellDirection = sample.swellDirection ?? sample.waveDirection;
-  const windSpeed = sample.windSpeed ?? 0;
-  const gusts = sample.windGusts ?? windSpeed;
   const rain = sample.precipitationProbability ?? 0;
   const cloud = sample.cloudCover ?? 0;
 
-  const heightScore = heightRangeScore(
-    height,
-    beach.idealHeight[0],
-    beach.idealHeight[1],
-    beach.maxHeight,
-  );
-  const periodScore = periodRangeScore(period);
-  const directionScoreValue = directionWindowScore(
-    swellDirection,
-    beach.swellCenter,
-    beach.swellSpread,
-  );
-  const swell = 100 * (heightScore * 0.44 + periodScore * 0.34 + directionScoreValue * 0.22);
+  // Score swell partitions, not blended wave height. Primary + half the secondary
+  // swell make up clean energy; the wind-wave partition is chop (contamination).
+  const ePrimary = waveEnergy(swellHeight, swellPeriod);
+  const eSecondary = waveEnergy(sample.secondarySwellHeight, sample.secondarySwellPeriod);
+  const eWind = waveEnergy(sample.windWaveHeight, sample.windWavePeriod);
+  const eSwell = ePrimary + 0.5 * eSecondary;
+  const eTotal = ePrimary + eSecondary + eWind || 1e-6;
 
-  const windDiff = angularDiff(sample.windDirection, beach.offshoreWind);
-  const windDirectionScore = windDirectionQuality(windDiff);
-  const speedScore = windSpeedScore(windSpeed);
-  const gustPenalty = clamp((gusts - windSpeed - 10) / 25, 0, 0.28);
-  const wind = 100 * clamp(windDirectionScore * (0.62 + 0.38 * speedScore) - gustPenalty, 0, 1);
+  const sizeFit = clamp(Math.sqrt(eSwell / ENERGY_REF), 0, 1); // sqrt -> diminishing returns
+  const periodFit = periodCurve(swellPeriod);
+  const windseaFrac = clamp(eWind / eTotal, 0, 1);
+  const cleanliness = clamp(1 - 0.8 * windseaFrac, 0, 1); // chop on the swell drops quality
+  const oversize =
+    Number.isFinite(beach.maxHeight) && swellHeight > beach.maxHeight
+      ? clamp(1 - (swellHeight - beach.maxHeight) / beach.maxHeight, 0.3, 1) // too big -> closes out
+      : 1;
 
-  const tideScoreValue = tideScore(sample.seaLevel, beach.idealTide, beach.tideSpread);
-  const tide = tideScoreValue * 100;
-  const coastal = coastalFitScore(beach, sample);
-  const weather = 100 * clamp(1 - rain / 170 - cloud / 500, 0.18, 1);
+  const swellQuality = clamp(0.55 * sizeFit + 0.45 * periodFit, 0, 1) * cleanliness * oversize;
+  const directionFit = directionWindowScore(swellDirection, beach.swellCenter, beach.swellSpread);
+  const potential = swellQuality * (0.6 + 0.4 * directionFit); // direction modulates, never zeroes
+
+  // Wind multiplies the swell potential instead of being a separate additive slice.
+  const windFactor = windQualityFactor(beach, sample);
+  const core = potential * (0.35 + 0.65 * windFactor);
+
+  // Context terms are gated by core so they cannot lift a flat or blown-out hour.
+  const tideFit = tideScore(sample.seaLevel, beach.idealTide, beach.tideSpread);
+  const coastalFit = coastalFitScore(beach, sample) / 100;
+  const weatherFit = clamp(1 - rain / 170 - cloud / 500, 0.18, 1);
+  const context = 0.6 * coastalFit + 0.25 * tideFit + 0.15 * weatherFit;
+  const coreGate = clamp(core * 1.5, 0, 1);
+
+  const score = Math.round(clamp(100 * (0.82 * core + 0.18 * context * coreGate), 0, 100));
   const confidence = [94, 87, 76, 64][dayOffset] ?? 60;
 
-  const weighted =
-    swell * SCORE_WEIGHTS.swell +
-    wind * SCORE_WEIGHTS.wind +
-    coastal * SCORE_WEIGHTS.coastal +
-    tide * SCORE_WEIGHTS.tide +
-    weather * SCORE_WEIGHTS.weather;
-  const score = Math.round(clamp(weighted, 0, 100));
+  const windDiff = angularDiff(sample.windDirection, beach.offshoreWind);
+  const windQuality = windQualityText(windDiff, sample.windSpeed ?? 0);
   const tideTrend = tideTrendText(sample.seaLevel, sample.nextSeaLevel);
-  const windQuality = windQualityText(windDiff, windSpeed);
+  const tideQuality = tideQualityText(tideFit);
 
   return {
     score,
     label: scoreLabel(score),
     confidence,
     parts: {
-      swell,
-      wind,
-      coastal,
-      tide,
-      weather,
+      swell: 100 * potential,
+      wind: 100 * windFactor,
+      coastal: 100 * coastalFit,
+      tide: 100 * tideFit,
+      weather: 100 * weatherFit,
+    },
+    detail: {
+      energy: 0.49 * eSwell, // approx kW/m of clean swell, for the prose layer
+      windseaFrac,
+      sizeFit,
+      periodFit,
+      directionFit,
+      windFactor,
+      cleanliness,
+      oversize,
     },
     windQuality,
     tideTrend,
-    tideQuality: tideQualityText(tideScoreValue),
+    tideQuality,
     reasons: buildReasons({
       sample,
-      height,
-      period,
+      height: swellHeight,
+      period: swellPeriod,
       swellDirection,
-      coastal,
+      coastal: 100 * coastalFit,
+      windseaFrac,
+      energy: 0.49 * eSwell,
       beach,
       windQuality,
       tideTrend,
-      tideQuality: tideQualityText(tideScoreValue),
+      tideQuality,
       score,
     }),
   };
@@ -1445,56 +1915,54 @@ function buildReasons(context) {
     period,
     swellDirection,
     coastal,
+    windseaFrac,
     beach,
     windQuality,
     tideTrend,
     tideQuality,
     score,
   } = context;
+  const pt = state.lang === "pt";
+  const rain = sample.precipitationProbability ?? 0;
   const reasons = [];
 
+  const swellLine = `${formatNumber(height, 1)} m @ ${formatNumber(period, 1)} s`;
   reasons.push(
-    `${formatNumber(height, 1)} m @ ${formatNumber(period, 1)} s swell from ${degToCompass(swellDirection)}`,
+    pt
+      ? `Swell de ${swellLine} de ${degToCompass(swellDirection)}`
+      : `${swellLine} swell from ${degToCompass(swellDirection)}`,
   );
   reasons.push(
-    `${windQuality} ${degToCompass(sample.windDirection)} wind at ${formatNumber(sample.windSpeed, 0)} km/h`,
+    pt
+      ? `Vento ${windQuality} de ${degToCompass(sample.windDirection)} a ${formatNumber(sample.windSpeed, 0)} km/h`
+      : `${windQuality} ${degToCompass(sample.windDirection)} wind at ${formatNumber(sample.windSpeed, 0)} km/h`,
   );
-  reasons.push(`${tideTrend} ${tideQuality.toLowerCase()} tide at ${formatSigned(sample.seaLevel)} m`);
+  reasons.push(
+    pt
+      ? `Maré ${tideTrend.toLowerCase()}, ${tideQuality.toLowerCase()}, em ${formatSigned(sample.seaLevel)} m`
+      : `${tideTrend} ${tideQuality.toLowerCase()} tide at ${formatSigned(sample.seaLevel)} m`,
+  );
 
-  if (coastal < 48) {
-    reasons.push(`Coastal fit is filtering the forecast at ${beach.name}`);
+  // Fourth reason: prioritize wind-sea contamination, then coastal fit, then weather.
+  if (Number.isFinite(windseaFrac) && windseaFrac >= 0.45) {
+    reasons.push(pt ? "Mar de vento bagunçando o swell" : "Wind-sea is contaminating the swell");
+  } else if (coastal < 48) {
+    reasons.push(
+      pt ? `Encaixe da costa filtra a previsão na ${beach.name}` : `Coastal fit is filtering the forecast at ${beach.name}`,
+    );
   } else if (coastal >= 74) {
-    reasons.push(`Coastal fit supports ${spotDataProfile(beach).beachAxis}`);
-  } else if ((sample.precipitationProbability ?? 0) >= 45) {
-    reasons.push(`${formatNumber(sample.precipitationProbability, 0)}% rain risk`);
-  }
-
-  if (reasons.length < 4 && (sample.precipitationProbability ?? 0) >= 45) {
-    reasons.push(`${formatNumber(sample.precipitationProbability, 0)}% rain risk`);
-  } else if (reasons.length < 4 && score >= 70) {
-    reasons.push("Clean enough weather window");
+    reasons.push(
+      pt
+        ? `Encaixe da costa favorece ${tProfile(beach, "beachAxis")}`
+        : `Coastal fit supports ${spotDataProfile(beach).beachAxis}`,
+    );
+  } else if (rain >= 45) {
+    reasons.push(pt ? `${formatNumber(rain, 0)}% de risco de chuva` : `${formatNumber(rain, 0)}% rain risk`);
+  } else if (score >= 70) {
+    reasons.push(pt ? "Janela de tempo limpa o bastante" : "Clean enough weather window");
   }
 
   return reasons.slice(0, 4);
-}
-
-function heightRangeScore(height, idealMin, idealMax, maxHeight) {
-  if (!Number.isFinite(height)) return 0.45;
-  const minSurf = Math.max(0.25, idealMin * 0.48);
-  if (height <= minSurf) return scale(height, 0, minSurf, 0.08, 0.22);
-  if (height < idealMin) return scale(height, minSurf, idealMin, 0.22, 1);
-  if (height <= idealMax) return 1;
-  if (height < maxHeight) return scale(height, idealMax, maxHeight, 1, 0.32);
-  return 0.22;
-}
-
-function periodRangeScore(period) {
-  if (!Number.isFinite(period)) return 0.45;
-  if (period < 5) return scale(period, 0, 5, 0.12, 0.32);
-  if (period < 8) return scale(period, 5, 8, 0.32, 0.9);
-  if (period <= 14) return 1;
-  if (period <= 18) return scale(period, 14, 18, 0.95, 0.76);
-  return 0.66;
 }
 
 function directionWindowScore(direction, center, spread) {
@@ -1503,24 +1971,6 @@ function directionWindowScore(direction, center, spread) {
   if (diff >= spread) return 0.08;
   const normalized = diff / spread;
   return clamp(1 - normalized ** 1.55, 0.08, 1);
-}
-
-function windDirectionQuality(diff) {
-  if (!Number.isFinite(diff)) return 0.55;
-  if (diff <= 35) return 1;
-  if (diff <= 70) return 0.84;
-  if (diff <= 105) return 0.58;
-  if (diff <= 145) return 0.31;
-  return 0.12;
-}
-
-function windSpeedScore(speed) {
-  if (!Number.isFinite(speed)) return 0.6;
-  if (speed <= 5) return 1;
-  if (speed <= 12) return scale(speed, 5, 12, 0.96, 0.78);
-  if (speed <= 22) return scale(speed, 12, 22, 0.78, 0.46);
-  if (speed <= 34) return scale(speed, 22, 34, 0.46, 0.2);
-  return 0.12;
 }
 
 function tideScore(level, ideal, spread) {
@@ -1560,20 +2010,33 @@ function swellEnergy(height, period) {
 }
 
 function tideTrendText(level, nextLevel) {
-  if (!Number.isFinite(level) || !Number.isFinite(nextLevel)) return "Steady";
+  const steady = state.lang === "pt" ? "Parada" : "Steady";
+  if (!Number.isFinite(level) || !Number.isFinite(nextLevel)) return steady;
   const delta = nextLevel - level;
-  if (Math.abs(delta) < 0.025) return "Steady";
+  if (Math.abs(delta) < 0.025) return steady;
+  if (state.lang === "pt") return delta > 0 ? "Enchendo" : "Vazando";
   return delta > 0 ? "Rising" : "Dropping";
 }
 
 function tideQualityText(score) {
-  if (score >= 0.82) return "Prime";
-  if (score >= 0.58) return "Usable";
-  if (score >= 0.35) return "Tricky";
-  return "Poor";
+  const labels =
+    state.lang === "pt"
+      ? ["Ótima", "Boa", "Difícil", "Ruim"]
+      : ["Prime", "Usable", "Tricky", "Poor"];
+  if (score >= 0.82) return labels[0];
+  if (score >= 0.58) return labels[1];
+  if (score >= 0.35) return labels[2];
+  return labels[3];
 }
 
 function windQualityText(diff, speed) {
+  if (state.lang === "pt") {
+    const strength = speed >= 26 ? "forte" : speed >= 15 ? "moderado" : "leve";
+    if (diff <= 45) return `terral ${strength}`;
+    if (diff <= 95) return `terral lateral ${strength}`;
+    if (diff <= 135) return `maral lateral ${strength}`;
+    return `maral ${strength}`;
+  }
   const strength = speed >= 26 ? "strong" : speed >= 15 ? "moderate" : "light";
   if (diff <= 45) return `${strength} offshore`;
   if (diff <= 95) return `${strength} cross-offshore`;
@@ -1582,11 +2045,15 @@ function windQualityText(diff, speed) {
 }
 
 function scoreLabel(score) {
-  if (score >= 80) return "Excellent";
-  if (score >= 66) return "Good";
-  if (score >= 52) return "Workable";
-  if (score >= 38) return "Marginal";
-  return "Poor";
+  const labels =
+    state.lang === "pt"
+      ? ["Excelente", "Bom", "Surfável", "Fraco", "Ruim"]
+      : ["Excellent", "Good", "Workable", "Marginal", "Poor"];
+  if (score >= 80) return labels[0];
+  if (score >= 66) return labels[1];
+  if (score >= 52) return labels[2];
+  if (score >= 38) return labels[3];
+  return labels[4];
 }
 
 function pinClass(score) {
@@ -1645,22 +2112,29 @@ function formatDay(offset) {
   const now = new Date();
   const target = new Date(now);
   target.setDate(now.getDate() + offset);
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  }).format(target);
+  return capitalize(
+    new Intl.DateTimeFormat(localeTag(), {
+      timeZone: TZ,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }).format(target),
+  );
 }
 
 function formatWeekday(offset) {
   const now = new Date();
   const target = new Date(now);
   target.setDate(now.getDate() + offset);
-  return new Intl.DateTimeFormat("en-US", {
+  const label = new Intl.DateTimeFormat(localeTag(), {
     timeZone: TZ,
     weekday: "short",
   }).format(target);
+  return capitalize(label.replace(/\.$/, ""));
+}
+
+function capitalize(value) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }
 
 function formatDayHour(offset, hour) {
@@ -1672,7 +2146,7 @@ function formatHour(hour) {
 }
 
 function formatClock(date) {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(localeTag(), {
     timeZone: TZ,
     hour: "2-digit",
     minute: "2-digit",
@@ -1696,24 +2170,7 @@ function formatDegrees(value) {
 
 function degToCompass(degrees) {
   if (!Number.isFinite(degrees)) return "--";
-  const directions = [
-    "N",
-    "NNE",
-    "NE",
-    "ENE",
-    "E",
-    "ESE",
-    "SE",
-    "SSE",
-    "S",
-    "SSW",
-    "SW",
-    "WSW",
-    "W",
-    "WNW",
-    "NW",
-    "NNW",
-  ];
+  const directions = COMPASS[state.lang] ?? COMPASS.en;
   const index = Math.round((((degrees % 360) + 360) % 360) / 22.5) % 16;
   return directions[index];
 }
