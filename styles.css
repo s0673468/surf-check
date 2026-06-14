@@ -449,6 +449,72 @@ h1 {
   text-transform: uppercase;
 }
 
+/* ---------- Day overview band ---------- */
+.day-overview {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.day-overview[hidden] {
+  display: none;
+}
+
+.day-overview-score {
+  align-items: center;
+  border-radius: var(--radius-panel);
+  color: #fff;
+  display: grid;
+  gap: 2px;
+  height: 76px;
+  justify-items: center;
+  min-width: 84px;
+  padding: 8px;
+}
+
+.day-overview-number {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.day-overview-tier {
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.day-overview-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.day-overview .panel-eyebrow {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.day-overview .panel-eyebrow .material-symbols-rounded {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.day-overview-text {
+  color: var(--fg1);
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.5;
+  margin: 0;
+}
+
 /* ---------- Hero grid (best bets + map) ---------- */
 .hero-grid {
   align-items: start;
@@ -1268,6 +1334,15 @@ h1 {
   .summary-top {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .day-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .day-overview-score {
+    height: 64px;
+    width: 100%;
   }
 
   .score-badge {

@@ -421,6 +421,7 @@ const UI = {
     day: "Dia",
     hour: "Hora",
     today: "Hoje",
+    daySummary: "Resumo do dia",
     bestBets: "Melhores opções",
     topPick: (label) => `Top do dia · ${label}`,
     selectedSpot: "Praia selecionada",
@@ -458,6 +459,7 @@ const UI = {
     day: "Day",
     hour: "Hour",
     today: "Today",
+    daySummary: "The day at a glance",
     bestBets: "Best bets",
     topPick: (label) => `Top pick · ${label}`,
     selectedSpot: "Selected spot",
@@ -627,6 +629,7 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.selectedSummary = document.querySelector("#selectedSummary");
   elements.metricGrid = document.querySelector("#metricGrid");
   elements.rankedList = document.querySelector("#rankedList");
+  elements.dayOverview = document.querySelector("#dayOverview");
   elements.timelinePanel = document.querySelector("#timelinePanel");
   elements.map = document.querySelector("#map");
   elements.fallbackMap = document.querySelector("#fallbackMap");
@@ -916,6 +919,7 @@ function render() {
   }
 
   updateMarkers();
+  renderDayOverview();
   renderRankedList();
   renderSelectedSummary();
   renderTimeline();
@@ -1221,6 +1225,208 @@ function compactSessionRead(scored) {
       : `${scored.score.label}: ${reads[support.key]}. Watch ${limiting.label}.`;
   }
   return `${scored.score.label}: ${reads[limiting.key]}.`;
+}
+
+// ---------------------------------------------------------------------------
+// Day-at-a-glance overview. A plain-language, whole-region read of the selected
+// day: overall size + cleanliness, the best time window, the top one or two
+// beaches, and a single watch-out. Built entirely from the same scored samples
+// that drive every other panel — no extra data, just zoomed all the way out.
+// ---------------------------------------------------------------------------
+
+// Every beach × every forecast hour for the day, scored. The raw material the
+// day summary reasons over.
+function getDayScan(dayOffset) {
+  const entries = [];
+  for (const beach of BEACHES) {
+    for (const hour of HOURS) {
+      const scored = getScoredSample(beach, dayOffset, hour);
+      if (scored) entries.push({ beach, hour, scored });
+    }
+  }
+  return entries;
+}
+
+const DAY_PROSE = {
+  en: {
+    size: { flat: "pretty much flat", small: "small", fun: "fun-sized", solid: "solid", big: "big and powerful" },
+    clean: { clean: "clean", mixed: "a touch textured", messy: "wind-blown" },
+    window: { early: "early morning", morning: "mid-morning", midday: "around midday", afternoon: "the afternoon", late: "late afternoon" },
+  },
+  pt: {
+    size: { flat: "praticamente flat", small: "pequeno", fun: "tamanho bom", solid: "bom tamanho", big: "grande e com força" },
+    clean: { clean: "limpo", mixed: "com textura", messy: "ventado" },
+    window: { early: "de manhã cedo", morning: "no meio da manhã", midday: "por volta do meio-dia", afternoon: "à tarde", late: "no fim da tarde" },
+  },
+};
+
+function describeDay(dayOffset) {
+  const scan = getDayScan(dayOffset);
+  if (!scan.length) return null;
+
+  const pt = state.lang === "pt";
+  const f = DAY_PROSE[pt ? "pt" : "en"];
+  const bestOf = (entries) => entries.reduce((a, b) => (b.scored.score.score > a.scored.score.score ? b : a));
+
+  // Single best (beach, hour) of the day — drives the headline score.
+  const best = bestOf(scan);
+  const dayPeak = best.scored.score.score;
+
+  // Best score per hour across all beaches → tells us when the day is good.
+  const hourBest = HOURS.map((hour) => {
+    const hourEntries = scan.filter((e) => e.hour === hour);
+    return hourEntries.length ? { hour, score: bestOf(hourEntries).scored.score.score } : null;
+  }).filter(Boolean);
+
+  // Best score per beach across the day → which spots to call out.
+  const beachPeak = BEACHES.map((beach) => {
+    const beachEntries = scan.filter((e) => e.beach.id === beach.id);
+    return beachEntries.length ? { beach, score: bestOf(beachEntries).scored.score.score } : null;
+  })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+
+  // --- Conditions: representative size + cleanliness at the day's best hour ---
+  const peakHourEntries = scan.filter((e) => e.hour === best.hour);
+  const repHeight = average(
+    peakHourEntries.map((e) => e.scored.sample.swellHeight ?? e.scored.sample.waveHeight),
+  );
+  const windQuality = average(peakHourEntries.map((e) => e.scored.score.parts.wind));
+
+  let sizeKey = "small";
+  if (Number.isFinite(repHeight)) {
+    if (repHeight < 0.6) sizeKey = "flat";
+    else if (repHeight < 1.0) sizeKey = "small";
+    else if (repHeight < 1.6) sizeKey = "fun";
+    else if (repHeight < 2.2) sizeKey = "solid";
+    else sizeKey = "big";
+  }
+  if (dayPeak < 30) sizeKey = "flat"; // nothing surfable anywhere → call it flat
+
+  let cleanKey = "mixed";
+  if (Number.isFinite(windQuality)) {
+    cleanKey = windQuality >= 72 ? "clean" : windQuality >= 48 ? "mixed" : "messy";
+  }
+
+  // --- Timing: best window + morning vs afternoon trend ---
+  const goodThreshold = Math.max(50, dayPeak - 10);
+  const goodHours = hourBest.filter((h) => h.score >= goodThreshold).map((h) => h.hour);
+  const windowHours = goodHours.length ? goodHours : [best.hour];
+  const windowCenter = average(windowHours);
+
+  let windowKey = "midday";
+  if (windowCenter <= 9) windowKey = "early";
+  else if (windowCenter <= 11.5) windowKey = "morning";
+  else if (windowCenter <= 14) windowKey = "midday";
+  else if (windowCenter <= 16) windowKey = "afternoon";
+  else windowKey = "late";
+
+  const allDay = windowHours.length >= Math.ceil(HOURS.length * 0.7);
+
+  const mAvg = average(hourBest.filter((h) => h.hour <= 10).map((h) => h.score));
+  const aAvg = average(hourBest.filter((h) => h.hour >= 14).map((h) => h.score));
+  let trend = "steady";
+  if (Number.isFinite(mAvg) && Number.isFinite(aAvg)) {
+    if (mAvg - aAvg >= 10) trend = "fadesPM";
+    else if (aAvg - mAvg >= 10) trend = "buildsPM";
+  }
+
+  // --- Watch-out: rain over the good window at the top beach ---
+  const topId = beachPeak[0]?.beach.id;
+  const rainMax = Math.max(
+    0,
+    ...scan
+      .filter((e) => e.beach.id === topId && windowHours.includes(e.hour))
+      .map((e) => e.scored.sample.precipitationProbability ?? 0),
+  );
+
+  // --- Assemble the sentences ---
+  const sentences = [];
+
+  // 1. Conditions
+  if (sizeKey === "flat") {
+    sentences.push(pt ? "Praticamente flat." : "Pretty much flat.");
+  } else {
+    sentences.push(`${capitalize(f.size[sizeKey])}, ${f.clean[cleanKey]}.`);
+  }
+
+  // 2. Timing / worth-it
+  if (dayPeak < 45) {
+    sentences.push(pt ? "Não vale muito a pena." : "Not really worth a session.");
+  } else if (trend === "fadesPM") {
+    sentences.push(pt ? "Melhor cedo, antes do vento entrar." : "Best early, before the wind comes up.");
+  } else if (trend === "buildsPM") {
+    sentences.push(pt ? "Melhora à tarde." : "It picks up through the afternoon.");
+  } else if (allDay) {
+    sentences.push(pt ? "Fica parecido o dia todo." : "Holds pretty steady all day.");
+  } else {
+    sentences.push(pt ? `Melhor ${f.window[windowKey]}.` : `Best ${f.window[windowKey]}.`);
+  }
+
+  // 3. Spots
+  const top = beachPeak[0];
+  const second = beachPeak[1];
+  const useTwo = second && second.score >= 50 && second.score >= top.score - 7;
+  if (top) {
+    const name1 = top.beach.name;
+    const name2 = useTwo ? second.beach.name : null;
+    if (dayPeak >= 52) {
+      sentences.push(
+        name2
+          ? pt
+            ? `${name1} e ${name2} são as melhores opções.`
+            : `${name1} and ${name2} are your best bets.`
+          : pt
+            ? `${name1} é a melhor opção.`
+            : `${name1} is your best bet.`,
+      );
+    } else {
+      sentences.push(pt ? `${name1} é a opção menos ruim.` : `${name1} is the least-bad call.`);
+    }
+  }
+
+  // 4. Watch-out (rain only; wind is already implied by the timing line)
+  if (rainMax >= 55) {
+    sentences.push(
+      pt
+        ? `De olho na chuva — ${formatNumber(rainMax, 0)}% de chance.`
+        : `Heads up — ${formatNumber(rainMax, 0)}% chance of rain.`,
+    );
+  }
+
+  return {
+    text: sentences.join(" "),
+    eyebrow: `${t("daySummary")} · ${formatDay(dayOffset)}`,
+    peakScore: dayPeak,
+    peakLabel: best.scored.score.label,
+  };
+}
+
+function renderDayOverview() {
+  if (!elements.dayOverview) return;
+
+  const day =
+    state.loading || (state.error && state.forecasts.size === 0)
+      ? null
+      : describeDay(state.selectedDayOffset);
+
+  if (!day) {
+    elements.dayOverview.hidden = true;
+    elements.dayOverview.innerHTML = "";
+    return;
+  }
+
+  elements.dayOverview.hidden = false;
+  elements.dayOverview.innerHTML = `
+    <div class="day-overview-score ${pinClass(day.peakScore)}">
+      <span class="day-overview-number">${day.peakScore}</span>
+      <span class="day-overview-tier">${escapeHtml(day.peakLabel)}</span>
+    </div>
+    <div class="day-overview-body">
+      <span class="panel-eyebrow"><span class="material-symbols-rounded" aria-hidden="true">today</span>${escapeHtml(day.eyebrow)}</span>
+      <p class="day-overview-text">${escapeHtml(day.text)}</p>
+    </div>
+  `;
 }
 
 const SWELL_PROSE = {

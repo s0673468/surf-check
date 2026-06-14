@@ -23,6 +23,10 @@ Then visit `http://localhost:4173`.
 ## Layout
 
 - **Controls** — day (Today + the next three weekdays) and hour (06:00–18:00).
+- **The day at a glance** — one plain-language paragraph summarizing the whole selected
+  day: overall size and cleanliness, the best time window, the top one or two beaches,
+  and a rain watch-out. Whole-day peak score on the left (vs. Best bets, which is the
+  selected hour). Generated in-browser from the same scored samples — see `describeDay`.
 - **Best bets** — beaches ranked for the selected day/hour, with the top pick highlighted.
 - **Map** — the same scores as colored pins around the island (Leaflet + OpenStreetMap).
 - **Selected spot** — score, a plain-language read, key metrics (swell / wind / tide /
