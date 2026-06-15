@@ -20,6 +20,14 @@ python3 -m http.server 4173
 
 Then visit `http://localhost:4173`.
 
+## Test
+
+Run the no-dependency smoke tests with:
+
+```bash
+npm test
+```
+
 ## Layout
 
 - **Controls** — day (Today + the next three weekdays) and hour (06:00–18:00).

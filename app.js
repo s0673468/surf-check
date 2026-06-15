@@ -904,8 +904,10 @@ function delay(milliseconds) {
 }
 
 function render() {
+  const view = getForecastView();
+
   renderControls();
-  renderTemperatureStrip();
+  renderTemperatureStrip(view);
 
   if (state.loading) {
     renderLoading();
@@ -918,11 +920,11 @@ function render() {
     return;
   }
 
-  updateMarkers();
+  updateMarkers(view);
   renderDayOverview();
-  renderRankedList();
-  renderSelectedSummary();
-  renderTimeline();
+  renderRankedList(view);
+  renderSelectedSummary(view);
+  renderTimeline(view);
 }
 
 function renderLoading() {
@@ -939,10 +941,75 @@ function renderError() {
   elements.timelinePanel.innerHTML = "";
 }
 
-function renderTemperatureStrip() {
-  const samples = BEACHES.map((beach) =>
-    getScoredSample(beach, state.selectedDayOffset, state.selectedHour),
-  ).filter(Boolean);
+function getForecastView(dayOffset = state.selectedDayOffset, hour = state.selectedHour) {
+  const beach = selectedBeach();
+  const scoredBeaches = getScoredBeachEntries(dayOffset, hour);
+  const scoredByBeachId = new Map(scoredBeaches.map((entry) => [entry.beach.id, entry.scored]));
+
+  return {
+    dayOffset,
+    hour,
+    selectedBeach: beach,
+    selectedScored: scoredByBeachId.get(beach.id) ?? null,
+    scoredBeaches,
+    rankedBeaches: [...scoredBeaches].sort(compareScoredEntries),
+    scoredByBeachId,
+  };
+}
+
+function getScoredBeachEntries(dayOffset, hour, beaches = BEACHES) {
+  return beaches
+    .map((beach) => ({
+      beach,
+      scored: getScoredSample(beach, dayOffset, hour),
+    }))
+    .filter((entry) => entry.scored);
+}
+
+function getScoredTimeline(beach, dayOffset) {
+  return HOURS.map((hour) => ({
+    hour,
+    scored: getScoredSample(beach, dayOffset, hour),
+  })).filter((entry) => entry.scored);
+}
+
+function getNearbyScoredBeachEntries(beach, dayOffset, hour, limit = 3) {
+  return getScoredBeachEntries(
+    dayOffset,
+    hour,
+    BEACHES.filter((other) => other.id !== beach.id),
+  )
+    .map((entry) => ({
+      ...entry,
+      distance: distanceKm(beach, entry.beach),
+    }))
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, limit);
+}
+
+function bestScoredEntry(entries) {
+  return entries.reduce((best, entry) =>
+    entry.scored.score.score > best.scored.score.score ? entry : best,
+  );
+}
+
+function groupScoredEntries(entries, keyFn) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = keyFn(entry);
+    const group = groups.get(key) ?? [];
+    group.push(entry);
+    groups.set(key, group);
+  }
+  return groups;
+}
+
+function compareScoredEntries(a, b) {
+  return b.scored.score.score - a.scored.score.score;
+}
+
+function renderTemperatureStrip(view = getForecastView()) {
+  const samples = view.scoredBeaches.map((entry) => entry.scored);
   const air = average(samples.map((item) => item.sample.temperature));
   const water = average(samples.map((item) => item.sample.seaTemperature));
   const label = samples.length
@@ -950,15 +1017,15 @@ function renderTemperatureStrip() {
     : t("airWaterEmpty");
 
   elements.tempStrip.innerHTML = `
-    <span>${escapeHtml(formatDayHour(state.selectedDayOffset, state.selectedHour))}</span>
+    <span>${escapeHtml(formatDayHour(view.dayOffset, view.hour))}</span>
     <strong>${escapeHtml(label)}</strong>
   `;
 }
 
-function updateMarkers() {
+function updateMarkers(view = getForecastView()) {
   for (const beach of BEACHES) {
     const marker = state.markers.get(beach.id);
-    const scored = getScoredSample(beach, state.selectedDayOffset, state.selectedHour);
+    const scored = view.scoredByBeachId.get(beach.id);
     const score = scored?.score?.score;
 
     if (state.map && marker?.setIcon) {
@@ -971,9 +1038,9 @@ function updateMarkers() {
   }
 }
 
-function renderSelectedSummary() {
-  const beach = selectedBeach();
-  const scored = getScoredSample(beach, state.selectedDayOffset, state.selectedHour);
+function renderSelectedSummary(view = getForecastView()) {
+  const beach = view.selectedBeach;
+  const scored = view.selectedScored;
 
   if (!scored) {
     elements.selectedSummary.innerHTML = `<div class="empty-state">${escapeHtml(t("noForecastHour"))}</div>`;
@@ -988,7 +1055,7 @@ function renderSelectedSummary() {
     <div class="summary-top">
       <div>
         <h2 class="beach-name">${escapeHtml(beach.name)}</h2>
-        <p class="beach-meta">${escapeHtml(formatDayHour(state.selectedDayOffset, state.selectedHour))} · ${escapeHtml(tBeach(beach, "breakType"))}</p>
+        <p class="beach-meta">${escapeHtml(formatDayHour(view.dayOffset, view.hour))} · ${escapeHtml(tBeach(beach, "breakType"))}</p>
       </div>
       <div class="score-badge ${badgeClass}">
         <span class="score-number">${score.score}</span>
@@ -1063,20 +1130,15 @@ function renderMetrics(scored) {
     .join("");
 }
 
-function renderRankedList() {
-  const scoredBeaches = BEACHES.map((beach) => ({
-    beach,
-    scored: getScoredSample(beach, state.selectedDayOffset, state.selectedHour),
-  }))
-    .filter((item) => item.scored)
-    .sort((a, b) => b.scored.score.score - a.scored.score.score);
+function renderRankedList(view = getForecastView()) {
+  const scoredBeaches = view.rankedBeaches;
 
   if (!scoredBeaches.length) {
     elements.rankedList.innerHTML = `<div class="empty-state">${escapeHtml(t("noForecastWindow"))}</div>`;
     return;
   }
 
-  const title = formatDayHour(state.selectedDayOffset, state.selectedHour);
+  const title = formatDayHour(view.dayOffset, view.hour);
   const [top, ...rest] = scoredBeaches;
 
   elements.rankedList.innerHTML = `
@@ -1133,25 +1195,22 @@ function renderBeachRow({ beach, scored }) {
   `;
 }
 
-function renderTimeline() {
-  const beach = selectedBeach();
-  const selectedScored = getScoredSample(beach, state.selectedDayOffset, state.selectedHour);
-  const bars = HOURS.map((hour) => ({
-    hour,
-    scored: getScoredSample(beach, state.selectedDayOffset, hour),
-  })).filter((item) => item.scored);
+function renderTimeline(view = getForecastView()) {
+  const beach = view.selectedBeach;
+  const selectedScored = view.selectedScored;
+  const bars = getScoredTimeline(beach, view.dayOffset);
 
   elements.timelinePanel.innerHTML = `
     <div class="section-head">
       <h2><span class="head-icon material-symbols-rounded" aria-hidden="true">schedule</span>${escapeHtml(t("hourByHour"))}</h2>
-      <span>${escapeHtml(beach.name)} · ${escapeHtml(formatDay(state.selectedDayOffset))}</span>
+      <span>${escapeHtml(beach.name)} · ${escapeHtml(formatDay(view.dayOffset))}</span>
     </div>
     <div class="timeline">
       ${bars
         .map(({ hour, scored }) => {
           const score = scored.score.score;
           return `
-            <button class="time-bar" type="button" aria-current="${hour === state.selectedHour}" data-hour="${hour}">
+            <button class="time-bar" type="button" aria-current="${hour === view.hour}" data-hour="${hour}">
               <span class="bar-column">
                 <span class="bar-fill ${pinClass(score)}" style="height: ${Math.max(10, score * 1.34)}px"></span>
               </span>
@@ -1162,7 +1221,7 @@ function renderTimeline() {
         })
         .join("")}
     </div>
-    ${selectedScored ? renderNearbyContrast(beach, selectedScored) : ""}
+    ${selectedScored ? renderNearbyContrast(beach, selectedScored, view) : ""}
   `;
 
   elements.timelinePanel.querySelectorAll(".time-bar").forEach((bar) => {
@@ -1237,14 +1296,13 @@ function compactSessionRead(scored) {
 // Every beach × every forecast hour for the day, scored. The raw material the
 // day summary reasons over.
 function getDayScan(dayOffset) {
-  const entries = [];
-  for (const beach of BEACHES) {
-    for (const hour of HOURS) {
-      const scored = getScoredSample(beach, dayOffset, hour);
-      if (scored) entries.push({ beach, hour, scored });
-    }
-  }
-  return entries;
+  return BEACHES.flatMap((beach) =>
+    getScoredTimeline(beach, dayOffset).map(({ hour, scored }) => ({
+      beach,
+      hour,
+      scored,
+    })),
+  );
 }
 
 const DAY_PROSE = {
@@ -1266,22 +1324,23 @@ function describeDay(dayOffset) {
 
   const pt = state.lang === "pt";
   const f = DAY_PROSE[pt ? "pt" : "en"];
-  const bestOf = (entries) => entries.reduce((a, b) => (b.scored.score.score > a.scored.score.score ? b : a));
+  const entriesByHour = groupScoredEntries(scan, (entry) => entry.hour);
+  const entriesByBeach = groupScoredEntries(scan, (entry) => entry.beach.id);
 
   // Single best (beach, hour) of the day — drives the headline score.
-  const best = bestOf(scan);
+  const best = bestScoredEntry(scan);
   const dayPeak = best.scored.score.score;
 
   // Best score per hour across all beaches → tells us when the day is good.
   const hourBest = HOURS.map((hour) => {
-    const hourEntries = scan.filter((e) => e.hour === hour);
-    return hourEntries.length ? { hour, score: bestOf(hourEntries).scored.score.score } : null;
+    const hourEntries = entriesByHour.get(hour) ?? [];
+    return hourEntries.length ? { hour, score: bestScoredEntry(hourEntries).scored.score.score } : null;
   }).filter(Boolean);
 
   // Best score per beach across the day → which spots to call out.
   const beachPeak = BEACHES.map((beach) => {
-    const beachEntries = scan.filter((e) => e.beach.id === beach.id);
-    return beachEntries.length ? { beach, score: bestOf(beachEntries).scored.score.score } : null;
+    const beachEntries = entriesByBeach.get(beach.id) ?? [];
+    return beachEntries.length ? { beach, score: bestScoredEntry(beachEntries).scored.score.score } : null;
   })
     .filter(Boolean)
     .sort((a, b) => b.score - a.score);
@@ -1710,16 +1769,8 @@ function describeWeather(sample) {
   };
 }
 
-function renderNearbyContrast(beach, selectedScored) {
-  const nearby = BEACHES.filter((other) => other.id !== beach.id)
-    .map((other) => ({
-      beach: other,
-      distance: distanceKm(beach, other),
-      scored: getScoredSample(other, state.selectedDayOffset, state.selectedHour),
-    }))
-    .filter((item) => item.scored)
-    .sort((a, b) => a.distance - b.distance)
-    .slice(0, 3);
+function renderNearbyContrast(beach, selectedScored, view = getForecastView()) {
+  const nearby = getNearbyScoredBeachEntries(beach, view.dayOffset, view.hour);
 
   if (!nearby.length) return "";
 
