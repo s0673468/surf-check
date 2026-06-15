@@ -44,6 +44,9 @@ globalThis.__surfCheckTest = {
   getNearbyScoredBeachEntries,
   getScoredBeachEntries,
   getScoredTimeline,
+  buildRadarTileUrl,
+  findClosestRadarFrameIndex,
+  normalizeRadarFrames,
   scoreSample,
   selectedBeach,
 };`,
@@ -182,6 +185,51 @@ test("day overview describes seeded forecast in both languages", () => {
     assert.equal(typeof day.peakScore, "number");
     assert.ok(!day.text.includes("undefined"));
   }
+});
+
+test("rain radar metadata normalizes past and nowcast frames", () => {
+  const normalized = surf.normalizeRadarFrames({
+    host: "https://tilecache.rainviewer.com",
+    radar: {
+      past: [
+        { time: 30, path: "/v2/radar/past-late" },
+        { time: 10, path: "/v2/radar/past-early" },
+      ],
+      nowcast: [
+        { time: 40, path: "/v2/radar/future" },
+        { time: "bad", path: "/v2/radar/bad" },
+        { time: 20 },
+      ],
+    },
+  });
+
+  assert.equal(normalized.host, "https://tilecache.rainviewer.com");
+  assert.deepEqual(
+    Array.from(normalized.frames, (frame) => frame.path),
+    ["/v2/radar/past-early", "/v2/radar/past-late", "/v2/radar/future"],
+  );
+});
+
+test("rain radar tile urls use RainViewer frame paths", () => {
+  assert.equal(
+    surf.buildRadarTileUrl("https://tilecache.rainviewer.com", {
+      path: "/v2/radar/sample",
+    }),
+    "https://tilecache.rainviewer.com/v2/radar/sample/256/{z}/{x}/{y}/2/1_1.png",
+  );
+  assert.equal(surf.buildRadarTileUrl("", { path: "/v2/radar/sample" }), "");
+});
+
+test("rain radar frame matching follows selected forecast time", () => {
+  const frames = [
+    { time: 1_000, path: "/v2/radar/a" },
+    { time: 1_600, path: "/v2/radar/b" },
+    { time: 2_200, path: "/v2/radar/c" },
+  ];
+
+  assert.equal(surf.findClosestRadarFrameIndex(frames, 1_650, 10), 1);
+  assert.equal(surf.findClosestRadarFrameIndex(frames, 3_000, 10), -1);
+  assert.equal(surf.findClosestRadarFrameIndex([], 1_650, 10), -1);
 });
 
 test("scoring rewards clean aligned groundswell over short-period windsea", () => {

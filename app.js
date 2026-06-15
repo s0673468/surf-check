@@ -2,6 +2,10 @@ const TZ = "America/Sao_Paulo";
 const HOUR_MIN = 6;
 const HOUR_MAX = 18;
 const HOURS = Array.from({ length: HOUR_MAX - HOUR_MIN + 1 }, (_, index) => HOUR_MIN + index);
+const RADAR_METADATA_URL = "https://api.rainviewer.com/public/weather-maps.json";
+const RADAR_FRAME_TOLERANCE_MINUTES = 65;
+const RADAR_NATIVE_MAX_ZOOM = 7;
+const RADAR_OPACITY = 0.42;
 // Relative influence of each dimension. The final score combines them
 // multiplicatively (see scoreSample); these weights drive the explanatory layer
 // (which factor most explains a difference, and the limiting/support factor).
@@ -395,14 +399,22 @@ const BEACHES = [
 
 const state = {
   selectedBeachId: "ingleses",
-  selectedDayOffset: 1,
-  selectedHour: 8,
+  selectedDayOffset: 0,
+  selectedHour: initialSelectedHour(),
   lang: "pt",
   forecasts: new Map(),
   map: null,
   markers: new Map(),
   loading: true,
   error: "",
+  radar: {
+    loading: false,
+    error: "",
+    host: "",
+    frames: [],
+    selectedFrameIndex: -1,
+    layer: null,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -435,6 +447,14 @@ const UI = {
     away: "de distância",
     nearlyTied: "Quase empatadas",
     rain: "chuva",
+    radar: "Radar",
+    radarLayer: "Chuva no mapa",
+    radarLoading: "Carregando radar",
+    radarUnavailable: "Radar indisponível",
+    radarMatched: (time) => `Radar ${time}`,
+    radarOutOfRange: (time) => `Sem radar para ${time}`,
+    radarLiveOnly: "RainViewer cobre apenas a janela recente.",
+    radarForecastRain: (rain) => `${rain}% de chuva no modelo`,
     cloud: "nuvens",
     water: "água",
     air: "ar",
@@ -473,6 +493,14 @@ const UI = {
     away: "away",
     nearlyTied: "Nearly tied",
     rain: "rain",
+    radar: "Radar",
+    radarLayer: "Rain on map",
+    radarLoading: "Loading radar",
+    radarUnavailable: "Radar unavailable",
+    radarMatched: (time) => `Radar ${time}`,
+    radarOutOfRange: (time) => `No radar for ${time}`,
+    radarLiveOnly: "RainViewer only covers the recent window.",
+    radarForecastRain: (rain) => `${rain}% rain in the forecast`,
     cloud: "cloud",
     water: "water",
     air: "air",
@@ -633,6 +661,7 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.timelinePanel = document.querySelector("#timelinePanel");
   elements.map = document.querySelector("#map");
   elements.fallbackMap = document.querySelector("#fallbackMap");
+  elements.radarControl = document.querySelector("#radarControl");
   elements.langToggle = document.querySelector("#langToggle");
 
   let stored = null;
@@ -677,6 +706,8 @@ function syncStaticChrome() {
       button.setAttribute("aria-pressed", button.dataset.lang === state.lang);
     });
   }
+
+  renderRadarControl();
 }
 
 function renderControls() {
@@ -765,11 +796,15 @@ function initializeMap() {
       });
     state.markers.set(beach.id, marker);
   }
+
+  renderRadarControl();
+  loadRadarFrames();
 }
 
 function initializeFallbackMap() {
   elements.map.hidden = true;
   elements.fallbackMap.hidden = false;
+  if (elements.radarControl) elements.radarControl.hidden = true;
   elements.fallbackMap.innerHTML = '<div class="fallback-island"></div>';
 
   const bounds = {
@@ -805,6 +840,161 @@ function makeMarkerIcon(score) {
     iconSize: [38, 38],
     iconAnchor: [19, 19],
   });
+}
+
+async function loadRadarFrames() {
+  if (!state.map) return;
+
+  state.radar.loading = true;
+  state.radar.error = "";
+  renderRadarControl();
+
+  try {
+    const metadata = await fetchJson(new URL(RADAR_METADATA_URL));
+    const { host, frames } = normalizeRadarFrames(metadata);
+    if (!host || !frames.length) {
+      throw new Error("Radar frames unavailable");
+    }
+
+    state.radar.host = host;
+    state.radar.frames = frames;
+    syncRadarToSelection();
+    state.radar.error = "";
+  } catch (error) {
+    console.warn("RainViewer radar unavailable", error);
+    state.radar.host = "";
+    state.radar.frames = [];
+    state.radar.selectedFrameIndex = -1;
+    state.radar.error = "unavailable";
+    removeRadarLayer();
+  } finally {
+    state.radar.loading = false;
+    updateRadarLayer();
+    renderRadarControl();
+  }
+}
+
+function normalizeRadarFrames(metadata) {
+  const host = typeof metadata?.host === "string" ? metadata.host : "";
+  const past = Array.isArray(metadata?.radar?.past) ? metadata.radar.past : [];
+  const nowcast = Array.isArray(metadata?.radar?.nowcast) ? metadata.radar.nowcast : [];
+  const frames = [...past, ...nowcast]
+    .map((frame) => ({
+      time: Number(frame?.time),
+      path: typeof frame?.path === "string" ? frame.path : "",
+    }))
+    .filter((frame) => Number.isFinite(frame.time) && frame.path)
+    .sort((a, b) => a.time - b.time);
+
+  return { host, frames };
+}
+
+function selectedRadarFrame() {
+  return state.radar.frames[state.radar.selectedFrameIndex] ?? null;
+}
+
+function syncRadarToSelection() {
+  state.radar.selectedFrameIndex = findClosestRadarFrameIndex(
+    state.radar.frames,
+    selectedForecastTimestampSeconds(),
+    RADAR_FRAME_TOLERANCE_MINUTES,
+  );
+}
+
+function findClosestRadarFrameIndex(frames, targetTimestampSeconds, toleranceMinutes) {
+  if (!Array.isArray(frames) || !frames.length || !Number.isFinite(targetTimestampSeconds)) {
+    return -1;
+  }
+
+  let bestIndex = -1;
+  let bestDiff = Infinity;
+  frames.forEach((frame, index) => {
+    const diff = Math.abs(frame.time - targetTimestampSeconds);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestIndex = index;
+    }
+  });
+
+  return bestDiff <= toleranceMinutes * 60 ? bestIndex : -1;
+}
+
+function buildRadarTileUrl(host, frame) {
+  if (!host || !frame?.path) return "";
+  return `${host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
+}
+
+function updateRadarLayer() {
+  if (!state.map) return;
+  const frame = selectedRadarFrame();
+  const url = buildRadarTileUrl(state.radar.host, frame);
+
+  if (!url || state.radar.error) {
+    removeRadarLayer();
+    return;
+  }
+
+  if (state.radar.layer?.setUrl) {
+    state.radar.layer.setUrl(url);
+    return;
+  }
+
+  state.radar.layer = L.tileLayer(url, {
+    attribution: "Radar &copy; RainViewer",
+    maxNativeZoom: RADAR_NATIVE_MAX_ZOOM,
+    opacity: RADAR_OPACITY,
+    zIndex: 350,
+  }).addTo(state.map);
+}
+
+function removeRadarLayer() {
+  if (!state.radar.layer) return;
+  if (state.map?.removeLayer) {
+    state.map.removeLayer(state.radar.layer);
+  }
+  state.radar.layer = null;
+}
+
+function renderRadarControl() {
+  if (!elements.radarControl) return;
+  if (!state.map) {
+    elements.radarControl.hidden = true;
+    return;
+  }
+
+  const frame = selectedRadarFrame();
+  const view = getForecastView();
+  const targetLabel = formatDayHour(state.selectedDayOffset, state.selectedHour);
+  const rain = selectedRainProbability(view);
+  const stateName = state.radar.loading
+    ? "loading"
+    : frame && !state.radar.error
+      ? "active"
+      : "muted";
+  const status = state.radar.loading
+    ? t("radarLoading")
+    : state.radar.error || !state.radar.frames.length
+      ? t("radarUnavailable")
+      : frame
+        ? t("radarMatched", formatRadarFrameTime(frame.time))
+        : t("radarOutOfRange", targetLabel);
+  const detail =
+    state.radar.error || !state.radar.frames.length
+      ? t("radarLiveOnly")
+      : `${t("radarForecastRain", formatNumber(rain, 0))}${frame ? "" : ` · ${t("radarLiveOnly")}`}`;
+
+  elements.radarControl.hidden = false;
+  elements.radarControl.dataset.state = stateName;
+  elements.radarControl.innerHTML = `
+    <div class="radar-control-top">
+      <span class="radar-chip">
+        <span class="material-symbols-rounded" aria-hidden="true">rainy</span>
+        <span>${escapeHtml(t("radarLayer"))}</span>
+      </span>
+      <span class="radar-status">${escapeHtml(status)}</span>
+    </div>
+    <span class="radar-detail">${escapeHtml(detail)}</span>
+  `;
 }
 
 async function loadForecasts() {
@@ -908,6 +1098,9 @@ function render() {
 
   renderControls();
   renderTemperatureStrip(view);
+  syncRadarToSelection();
+  updateRadarLayer();
+  renderRadarControl();
 
   if (state.loading) {
     renderLoading();
@@ -2348,9 +2541,33 @@ function average(values) {
   return finite.reduce((sum, value) => sum + value, 0) / finite.length;
 }
 
+function selectedRainProbability(view = getForecastView()) {
+  return view.selectedScored?.sample?.precipitationProbability ?? null;
+}
+
 function valueAt(hourly, key, index) {
   const value = hourly?.[key]?.[index];
   return value === null || value === undefined ? null : Number(value);
+}
+
+function initialSelectedHour() {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: TZ,
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(new Date()),
+  );
+  return clamp(Number.isFinite(hour) ? hour : 8, HOUR_MIN, HOUR_MAX);
+}
+
+function selectedForecastTimestampSeconds(
+  dayOffset = state.selectedDayOffset,
+  hour = state.selectedHour,
+) {
+  const [year, month, day] = dateKey(dayOffset).split("-").map(Number);
+  if (![year, month, day, hour].every(Number.isFinite)) return null;
+  return Date.UTC(year, month - 1, day, hour + 3, 0, 0) / 1000;
 }
 
 function dateKey(offset) {
@@ -2408,6 +2625,11 @@ function formatClock(date) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatRadarFrameTime(timestampSeconds) {
+  if (!Number.isFinite(timestampSeconds)) return "--";
+  return formatClock(new Date(timestampSeconds * 1000));
 }
 
 function formatNumber(value, digits = 0) {
