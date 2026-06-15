@@ -20,6 +20,14 @@ python3 -m http.server 4173
 
 Then visit `http://localhost:4173`.
 
+## Test
+
+Run the no-dependency smoke tests with:
+
+```bash
+npm test
+```
+
 ## Layout
 
 - **Controls** — day (Today + the next three weekdays) and hour (06:00–18:00).
@@ -28,7 +36,8 @@ Then visit `http://localhost:4173`.
   and a rain watch-out. Whole-day peak score on the left (vs. Best bets, which is the
   selected hour). Generated in-browser from the same scored samples — see `describeDay`.
 - **Best bets** — beaches ranked for the selected day/hour, with the top pick highlighted.
-- **Map** — the same scores as colored pins around the island (Leaflet + OpenStreetMap).
+- **Map** — the same scores as colored pins around the island (Leaflet + OpenStreetMap),
+  plus a RainViewer rain layer when radar data exists for the selected surf hour.
 - **Selected spot** — score, a plain-language read, key metrics (swell / wind / tide /
   weather), an hour-by-hour timeline, and the closest spots for comparison.
 
@@ -46,6 +55,8 @@ The app calls Open-Meteo directly from the browser (no key required):
   speed, wind direction, gusts.
 - **Marine API** — wave/swell height, direction, period, sea-level height, sea-surface
   temperature.
+- **RainViewer API** — recent radar frames for the map overlay. RainViewer only covers
+  the recent window, so future surf hours still use Open-Meteo rain probability.
 
 ## Scoring model
 
