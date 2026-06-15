@@ -408,7 +408,6 @@ const state = {
   loading: true,
   error: "",
   radar: {
-    loading: false,
     error: "",
     host: "",
     frames: [],
@@ -447,14 +446,6 @@ const UI = {
     away: "de distância",
     nearlyTied: "Quase empatadas",
     rain: "chuva",
-    radar: "Radar",
-    radarLayer: "Chuva no mapa",
-    radarLoading: "Carregando radar",
-    radarUnavailable: "Radar indisponível",
-    radarMatched: (time) => `Radar ${time}`,
-    radarOutOfRange: (time) => `Sem radar para ${time}`,
-    radarLiveOnly: "RainViewer cobre apenas a janela recente.",
-    radarForecastRain: (rain) => `${rain}% de chuva no modelo`,
     cloud: "nuvens",
     water: "água",
     air: "ar",
@@ -493,14 +484,6 @@ const UI = {
     away: "away",
     nearlyTied: "Nearly tied",
     rain: "rain",
-    radar: "Radar",
-    radarLayer: "Rain on map",
-    radarLoading: "Loading radar",
-    radarUnavailable: "Radar unavailable",
-    radarMatched: (time) => `Radar ${time}`,
-    radarOutOfRange: (time) => `No radar for ${time}`,
-    radarLiveOnly: "RainViewer only covers the recent window.",
-    radarForecastRain: (rain) => `${rain}% rain in the forecast`,
     cloud: "cloud",
     water: "water",
     air: "air",
@@ -661,7 +644,6 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.timelinePanel = document.querySelector("#timelinePanel");
   elements.map = document.querySelector("#map");
   elements.fallbackMap = document.querySelector("#fallbackMap");
-  elements.radarControl = document.querySelector("#radarControl");
   elements.langToggle = document.querySelector("#langToggle");
 
   let stored = null;
@@ -707,7 +689,6 @@ function syncStaticChrome() {
     });
   }
 
-  renderRadarControl();
 }
 
 function renderControls() {
@@ -797,14 +778,12 @@ function initializeMap() {
     state.markers.set(beach.id, marker);
   }
 
-  renderRadarControl();
   loadRadarFrames();
 }
 
 function initializeFallbackMap() {
   elements.map.hidden = true;
   elements.fallbackMap.hidden = false;
-  if (elements.radarControl) elements.radarControl.hidden = true;
   elements.fallbackMap.innerHTML = '<div class="fallback-island"></div>';
 
   const bounds = {
@@ -845,9 +824,7 @@ function makeMarkerIcon(score) {
 async function loadRadarFrames() {
   if (!state.map) return;
 
-  state.radar.loading = true;
   state.radar.error = "";
-  renderRadarControl();
 
   try {
     const metadata = await fetchJson(new URL(RADAR_METADATA_URL));
@@ -868,9 +845,7 @@ async function loadRadarFrames() {
     state.radar.error = "unavailable";
     removeRadarLayer();
   } finally {
-    state.radar.loading = false;
     updateRadarLayer();
-    renderRadarControl();
   }
 }
 
@@ -953,48 +928,6 @@ function removeRadarLayer() {
     state.map.removeLayer(state.radar.layer);
   }
   state.radar.layer = null;
-}
-
-function renderRadarControl() {
-  if (!elements.radarControl) return;
-  if (!state.map) {
-    elements.radarControl.hidden = true;
-    return;
-  }
-
-  const frame = selectedRadarFrame();
-  const view = getForecastView();
-  const targetLabel = formatDayHour(state.selectedDayOffset, state.selectedHour);
-  const rain = selectedRainProbability(view);
-  const stateName = state.radar.loading
-    ? "loading"
-    : frame && !state.radar.error
-      ? "active"
-      : "muted";
-  const status = state.radar.loading
-    ? t("radarLoading")
-    : state.radar.error || !state.radar.frames.length
-      ? t("radarUnavailable")
-      : frame
-        ? t("radarMatched", formatRadarFrameTime(frame.time))
-        : t("radarOutOfRange", targetLabel);
-  const detail =
-    state.radar.error || !state.radar.frames.length
-      ? t("radarLiveOnly")
-      : `${t("radarForecastRain", formatNumber(rain, 0))}${frame ? "" : ` · ${t("radarLiveOnly")}`}`;
-
-  elements.radarControl.hidden = false;
-  elements.radarControl.dataset.state = stateName;
-  elements.radarControl.innerHTML = `
-    <div class="radar-control-top">
-      <span class="radar-chip">
-        <span class="material-symbols-rounded" aria-hidden="true">rainy</span>
-        <span>${escapeHtml(t("radarLayer"))}</span>
-      </span>
-      <span class="radar-status">${escapeHtml(status)}</span>
-    </div>
-    <span class="radar-detail">${escapeHtml(detail)}</span>
-  `;
 }
 
 async function loadForecasts() {
@@ -1100,7 +1033,6 @@ function render() {
   renderTemperatureStrip(view);
   syncRadarToSelection();
   updateRadarLayer();
-  renderRadarControl();
 
   if (state.loading) {
     renderLoading();
@@ -2541,10 +2473,6 @@ function average(values) {
   return finite.reduce((sum, value) => sum + value, 0) / finite.length;
 }
 
-function selectedRainProbability(view = getForecastView()) {
-  return view.selectedScored?.sample?.precipitationProbability ?? null;
-}
-
 function valueAt(hourly, key, index) {
   const value = hourly?.[key]?.[index];
   return value === null || value === undefined ? null : Number(value);
@@ -2625,11 +2553,6 @@ function formatClock(date) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-function formatRadarFrameTime(timestampSeconds) {
-  if (!Number.isFinite(timestampSeconds)) return "--";
-  return formatClock(new Date(timestampSeconds * 1000));
 }
 
 function formatNumber(value, digits = 0) {
