@@ -316,6 +316,7 @@ const BEACHES = [
     swellCenter: 70,
     swellSpread: 70,
     idealHeight: [0.5, 1.6],
+    minSurfHeight: 0.6,
     maxHeight: 2.5,
     idealTide: 0.25,
     tideSpread: 0.5,
@@ -2154,6 +2155,8 @@ function getScoredSample(beach, dayOffset, hour) {
 // term and normalize against a reference, rather than the linear height-fit the
 // prototype used. ENERGY_REF ~= a very good Floripa day (1.8 m @ ~12 s clean swell).
 const ENERGY_REF = 30;
+const DEFAULT_MIN_SURF_HEIGHT = 0.6;
+const DEFAULT_FULL_SURF_HEIGHT = 0.85;
 
 function waveEnergy(height, period) {
   if (!Number.isFinite(height) || !Number.isFinite(period) || height <= 0 || period <= 0) {
@@ -2171,6 +2174,44 @@ function periodCurve(period) {
   if (period <= 13) return 0.7 + (period - 10) * 0.0833; // 0.70 -> 0.95
   if (period <= 16) return 0.95 + (period - 13) * 0.0167; // 0.95 -> 1.00
   return 1;
+}
+
+function surfableHeightFloor(beach) {
+  return Number.isFinite(beach.minSurfHeight) ? beach.minSurfHeight : DEFAULT_MIN_SURF_HEIGHT;
+}
+
+function fullySurfableHeight(beach) {
+  const floor = surfableHeightFloor(beach);
+  if (Number.isFinite(beach.fullSurfHeight) && beach.fullSurfHeight > floor) {
+    return beach.fullSurfHeight;
+  }
+  return Math.max(DEFAULT_FULL_SURF_HEIGHT, floor + 0.25);
+}
+
+function surfableHeightFactor(height, beach) {
+  if (!Number.isFinite(height)) return 0.75;
+
+  const floor = surfableHeightFloor(beach);
+  if (height < floor) {
+    const ratio = clamp(height / floor, 0, 1);
+    return clamp(0.25 + 0.57 * ratio ** 1.35, 0.25, 0.82);
+  }
+
+  const full = fullySurfableHeight(beach);
+  const ratio = clamp((height - floor) / (full - floor), 0, 1);
+  return clamp(0.9 + 0.1 * ratio ** 0.75, 0.9, 1);
+}
+
+function lowHeightScoreCap(height, beach) {
+  if (!Number.isFinite(height)) return 100;
+
+  const floor = surfableHeightFloor(beach);
+  if (height >= floor) return 100;
+
+  const tiny = floor * 0.7;
+  if (height <= tiny) return 36;
+
+  return Math.round(scale(height, tiny, floor, 36, 51));
 }
 
 // Multiplicative wind gate (0..1): glassy and light-offshore groom the face;
@@ -2219,6 +2260,7 @@ function scoreSample(beach, sample, dayOffset) {
 
   const sizeFit = clamp(Math.sqrt(eSwell / ENERGY_REF), 0, 1); // sqrt -> diminishing returns
   const periodFit = periodCurve(swellPeriod);
+  const sizeReadiness = surfableHeightFactor(swellHeight, beach);
   const windseaFrac = clamp(eWind / eTotal, 0, 1);
   const cleanliness = clamp(1 - 0.8 * windseaFrac, 0, 1); // chop on the swell drops quality
   const oversize =
@@ -2226,7 +2268,7 @@ function scoreSample(beach, sample, dayOffset) {
       ? clamp(1 - (swellHeight - beach.maxHeight) / beach.maxHeight, 0.3, 1) // too big -> closes out
       : 1;
 
-  const swellQuality = clamp(0.55 * sizeFit + 0.45 * periodFit, 0, 1) * cleanliness * oversize;
+  const swellQuality = clamp(0.55 * sizeFit + 0.45 * periodFit, 0, 1) * cleanliness * oversize * sizeReadiness;
   const directionFit = directionWindowScore(swellDirection, beach.swellCenter, beach.swellSpread);
   const potential = swellQuality * (0.6 + 0.4 * directionFit); // direction modulates, never zeroes
 
@@ -2241,7 +2283,9 @@ function scoreSample(beach, sample, dayOffset) {
   const context = 0.6 * coastalFit + 0.25 * tideFit + 0.15 * weatherFit;
   const coreGate = clamp(core * 1.5, 0, 1);
 
-  const score = Math.round(clamp(100 * (0.82 * core + 0.18 * context * coreGate), 0, 100));
+  const rawScore = Math.round(clamp(100 * (0.82 * core + 0.18 * context * coreGate), 0, 100));
+  const heightCap = lowHeightScoreCap(swellHeight, beach);
+  const score = Math.min(rawScore, heightCap);
   const confidence = [94, 87, 76, 64][dayOffset] ?? 60;
 
   const windDiff = angularDiff(sample.windDirection, beach.offshoreWind);
@@ -2264,11 +2308,14 @@ function scoreSample(beach, sample, dayOffset) {
       energy: 0.49 * eSwell, // approx kW/m of clean swell, for the prose layer
       windseaFrac,
       sizeFit,
+      sizeReadiness,
       periodFit,
       directionFit,
       windFactor,
       cleanliness,
       oversize,
+      heightCap,
+      minSurfHeight: surfableHeightFloor(beach),
     },
     windQuality,
     tideTrend,
@@ -2282,6 +2329,7 @@ function scoreSample(beach, sample, dayOffset) {
       windseaFrac,
       energy: 0.49 * eSwell,
       beach,
+      minSurfHeight: surfableHeightFloor(beach),
       windQuality,
       tideTrend,
       tideQuality,
@@ -2299,6 +2347,7 @@ function buildReasons(context) {
     coastal,
     windseaFrac,
     beach,
+    minSurfHeight,
     windQuality,
     tideTrend,
     tideQuality,
@@ -2325,8 +2374,14 @@ function buildReasons(context) {
       : `${tideTrend} ${tideQuality.toLowerCase()} tide at ${formatSigned(sample.seaLevel)} m`,
   );
 
-  // Fourth reason: prioritize wind-sea contamination, then coastal fit, then weather.
-  if (Number.isFinite(windseaFrac) && windseaFrac >= 0.45) {
+  // Fourth reason: prioritize hard surfability blockers, then contamination / fit.
+  if (Number.isFinite(height) && Number.isFinite(minSurfHeight) && height < minSurfHeight) {
+    reasons.push(
+      pt
+        ? `Altura abaixo do piso surfável de ${formatNumber(minSurfHeight, 1)} m`
+        : `Height below the ${formatNumber(minSurfHeight, 1)} m surfable floor`,
+    );
+  } else if (Number.isFinite(windseaFrac) && windseaFrac >= 0.45) {
     reasons.push(pt ? "Mar de vento bagunçando o swell" : "Wind-sea is contaminating the swell");
   } else if (coastal < 48) {
     reasons.push(

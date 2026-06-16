@@ -70,11 +70,15 @@ energy*, then degrade it for wind:
    (poor < 8 s, solid 10–13 s, premium 13 s+). A **windsea-contamination** penalty cuts
    quality when the wind-wave partition is large (chop on the face). Swell **direction**
    modulates this against each beach's preferred window.
-2. **Wind (multiplicative gate).** Clean-swell potential is multiplied by a wind factor:
+2. **Surfable-size floor.** Clean long-period micro-swell is still capped. The default
+   rideable floor is `0.6 m` (`DEFAULT_MIN_SURF_HEIGHT`), with per-spot overrides such
+   as `minSurfHeight` for Ingleses. Below that floor the score is gated and capped below
+   the surfable tier, so `0.5 m @ 14 s` can be clean but still poor.
+3. **Wind (multiplicative gate).** Clean-swell potential is multiplied by a wind factor:
    glassy and light-offshore groom the face, onshore degrades steeply past ~9 km/h, gusts
    and strong wind from any direction cap it. A great swell with onshore wind collapses
    toward ~35% of its potential, instead of still scoring well.
-3. **Context (gated).** Coastal fit, tide, and weather contribute a small amount that is
+4. **Context (gated).** Coastal fit, tide, and weather contribute a small amount that is
    *gated by the core* so they can't inflate a flat or blown-out hour.
 
 Data is the full swell decomposition from Open-Meteo (primary + secondary swell, wind
@@ -101,4 +105,5 @@ The site then serves at `https://<owner>.github.io/<name>/`.
 
 Tune `BEACHES` in `app.js` from local knowledge: which swell directions each beach
 really likes, which tides work best, which beaches close out as size increases, and
-whether protected corners should be scored separately.
+whether protected corners should be scored separately. Source-backed spot notes and
+candidate scoring tighten-ups live in `docs/spot-research.md`.
