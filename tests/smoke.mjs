@@ -106,6 +106,31 @@ function seedForecasts() {
   });
 }
 
+function cleanAlignedSample(beach, { height = 1.2, period = 12 } = {}) {
+  return {
+    temperature: 22,
+    precipitationProbability: 5,
+    cloudCover: 10,
+    windSpeed: 6,
+    windDirection: beach.offshoreWind,
+    windGusts: 8,
+    waveHeight: height,
+    waveDirection: beach.swellCenter,
+    wavePeriod: period,
+    swellHeight: height,
+    swellDirection: beach.swellCenter,
+    swellPeriod: period,
+    secondarySwellHeight: 0,
+    secondarySwellDirection: beach.swellCenter,
+    secondarySwellPeriod: period,
+    windWaveHeight: 0.04,
+    windWavePeriod: 4,
+    seaLevel: beach.idealTide,
+    nextSeaLevel: beach.idealTide + 0.01,
+    seaTemperature: 20,
+  };
+}
+
 test("forecast selectors build a reusable selected-hour view", () => {
   seedForecasts();
 
@@ -273,6 +298,37 @@ test("scoring rewards clean aligned groundswell over short-period windsea", () =
   assert.ok(clean.score > windsea.score + 15);
   assert.ok(clean.detail.periodFit > windsea.detail.periodFit);
   assert.ok(clean.detail.windseaFrac < windsea.detail.windseaFrac);
+});
+
+test("scoring keeps sub-0.6m Ingleses below the surfable tier", () => {
+  seedForecasts();
+
+  const beach = surf.BEACHES.find((item) => item.id === "ingleses");
+  const low = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 0.59, period: 16 }), 0);
+
+  assert.ok(low.score < 52);
+  assert.ok(low.detail.heightCap < 52);
+  assert.ok(low.detail.sizeReadiness < 1);
+  assert.ok(low.reasons.some((reason) => reason.includes("piso surf")));
+});
+
+test("scoring applies the 0.6m floor across beaches", () => {
+  seedForecasts();
+
+  surf.BEACHES.forEach((beach) => {
+    const low = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 0.59, period: 16 }), 0);
+    assert.ok(low.score < 52, `${beach.id} scored ${low.score}`);
+  });
+});
+
+test("scoring allows workable calls once swell reaches the floor", () => {
+  seedForecasts();
+
+  const beach = surf.BEACHES.find((item) => item.id === "ingleses");
+  const atFloor = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 0.6, period: 14 }), 0);
+
+  assert.ok(atFloor.score >= 52);
+  assert.equal(atFloor.detail.heightCap, 100);
 });
 
 test("scoring penalizes onshore wind for the same swell", () => {
