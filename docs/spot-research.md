@@ -4,6 +4,33 @@ Manual source pass from 2026-06-16. Treat this as forecast priors, not truth:
 public surf pages often disagree, and they cannot see live banks, crowd, access,
 or whether a section is actually breaking. Local checks should win over this file.
 
+## Applied Calibration (2026-06-17)
+
+A research + adversarial-verification pass (Surf-Forecast per-break "ideal swell +
+offshore wind", a local PT guide, Wikipedia) was fact-checked for geographic
+plausibility and applied to `BEACHES` in `app.js`. `swellCenter` = degrees the swell
+ideally comes **from**; `offshoreWind` = degrees the grooming wind comes **from**;
+`idealTide` is now a normalized **0 (low) – 1 (high)** state, not metres.
+
+| Spot | swellCenter | swellSpread | offshoreWind | idealHeight | maxHeight | idealTide | Note |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| praia-mole | 128 (ESE/SE) | 80 | 300 (WNW/NW) | 0.7–1.8 | 2.8 | 0.4 | ESE swell, more easterly than Joaquina (151/315 was an overcorrection). |
+| joaquina | 148 (SE) | 85 | 315 (NW) | 0.8–2.1 | 3.2 | 0.4 | SE groundswell + NW terral; marquee big-swell beach. |
+| campeche | 174 (S) | 70 | 318 (NW) | 0.8–2.0 | 2.9 | 0.5 | **Faces SOUTH** — old 124 (ESE) was the wrong corner. |
+| barra-da-lagoa | 75 (ENE) | 60 | 250 (WSW) | 0.5–1.4 | 1.9 | 0.5 | **Backwards before** — headland blocks S/SE, behaves like a north beach; all tides. |
+| mocambique | 118 (SE) | 88 | 312 (NW) | 0.7–2.2 | 3.2 | 0.5 | Most exposed; widest E-to-S window; holds the most size. |
+| santinho | 118 (ESE/SE) | 72 | 292 (WNW) | 0.7–1.9 | 2.8 | 0.4 | Already near-right; rejected a push to E/100. |
+| brava | 88 (E) | 60 | 268 (W) | 0.6–1.7 | 2.5 | 0.4 | East swell + W offshore. See contamination note below. |
+| ingleses | 52 (NE) | 62 | 220 (SW) | 0.8–1.7 | 2.2 | 0.5 | NE swell + strong S/SW offshore; `minSurfHeight` 0.7; shadowed from winter S groundswell. |
+| matadeiro | 125 (ESE/SE) | 70 | 228 (SW) | 0.6–1.6 | 2.4 | 0.35 | **offshore is SW**, not NW (NW is onshore for this cove). |
+| armacao | 130 (SE) | 58 | 238 (SW) | 0.6–1.5 | 2.1 | 0.5 | Same SW-offshore fix; tight window; `minSurfHeight` 0.65 (flat most days). |
+| lagoinha-do-leste | 135 (SE) | 82 | 312 (NW) | 0.8–2.0 | 3.0 | 0.5 | Already right; very exposed/powerful; any tide. |
+
+**Data-contamination flag:** Surf-Forecast's `Praia-Brava_1` page is the **Itajaí /
+Balneário Camboriú** Brava (26.95°S), *not* the Florianópolis Brava — do not use its
+NW-offshore values. Also discard the PT guide's "vento nordeste" offshore notes for
+Joaquina/Lagoinha (NE is onshore for an E/SE-facing beach).
+
 ## Scoring Tighten-Ups Suggested By Sources
 
 - Keep the `0.6 m` surfable-height floor as a default. The sources support the

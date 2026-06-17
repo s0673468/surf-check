@@ -45,7 +45,7 @@
           </div>
           <div class="status-pill" id="statusPill">
             <span class="status-dot"></span>
-            <span id="statusText">Carregando previsão</span>
+            <span id="statusText" role="status" aria-live="polite">Carregando previsão</span>
           </div>
           <div class="temp-strip" id="tempStrip">
             <span>Temperaturas</span>
@@ -66,19 +66,14 @@
           </div>
         </section>
 
-        <section class="day-overview" id="dayOverview" aria-live="polite" hidden></section>
+        <section class="day-overview" id="dayOverview" hidden></section>
 
         <section class="hero-grid">
           <div class="best-bets" id="rankedList"></div>
           <div class="map-panel">
             <div id="map" class="map"></div>
             <div id="fallbackMap" class="fallback-map" hidden></div>
-            <div class="map-legend" aria-label="Score legend">
-              <span><i class="legend-swatch excellent"></i>80+</span>
-              <span><i class="legend-swatch good"></i>65</span>
-              <span><i class="legend-swatch fair"></i>50</span>
-              <span><i class="legend-swatch poor"></i>&lt;50</span>
-            </div>
+            <div class="map-legend" aria-label="Score legend"></div>
           </div>
         </section>
 
