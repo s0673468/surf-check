@@ -1022,12 +1022,22 @@ async function fetchBeachForecast(beach) {
     fetchJson(weatherUrl),
     fetchJson(marineUrl),
   ]);
+  const weatherHourly = requireHourlyPayload(weather, "Weather", beach);
+  const marineHourly = requireHourlyPayload(marine, "Marine", beach);
 
   return {
     beachId: beach.id,
-    weather: weather.hourly,
-    marine: marine.hourly,
+    weather: weatherHourly,
+    marine: marineHourly,
   };
+}
+
+function requireHourlyPayload(payload, sourceName, beach) {
+  const hourly = payload?.hourly;
+  if (!hourly || !Array.isArray(hourly.time) || hourly.time.length === 0) {
+    throw new Error(`${sourceName} forecast missing hourly time series for ${beach.name}`);
+  }
+  return hourly;
 }
 
 async function fetchJson(url) {
