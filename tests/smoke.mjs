@@ -38,6 +38,7 @@ globalThis.__surfCheckTest = {
   state,
   dateKey,
   describeDay,
+  fetchBeachForecast,
   fetchJson,
   getForecastView,
   getScoredSample,
@@ -570,5 +571,28 @@ test("fetchJson retries transient failures before returning data", async () => {
   } finally {
     context.fetch = originalFetch;
     context.window.setTimeout = originalSetTimeout;
+  }
+});
+
+test("beach forecasts reject successful responses without hourly time arrays", async () => {
+  const originalFetch = context.fetch;
+
+  context.fetch = async (url) => ({
+    ok: true,
+    async json() {
+      if (String(url).includes("marine-api")) {
+        return { hourly: { time: ["2026-06-17T06:00"] } };
+      }
+      return { hourly: {} };
+    },
+  });
+
+  try {
+    await assert.rejects(
+      surf.fetchBeachForecast(surf.BEACHES[0]),
+      /Weather forecast missing hourly time series/,
+    );
+  } finally {
+    context.fetch = originalFetch;
   }
 });
