@@ -1,4 +1,5 @@
 const TZ = "America/Sao_Paulo";
+const SAO_PAULO_UTC_OFFSET_HOURS = 3; // UTC-3, no DST since 2019
 const HOUR_MIN = 6;
 const HOUR_MAX = 18;
 const HOURS = Array.from({ length: HOUR_MAX - HOUR_MIN + 1 }, (_, index) => HOUR_MIN + index);
@@ -31,7 +32,7 @@ const SPOT_DATA_PROFILES = {
     dataNeeds: ["bathymetry", "wavePartitions", "coastline", "sandbars"],
   },
   joaquina: {
-    beachAxis: "Open ESE beach",
+    beachAxis: "Open E-to-S beach",
     depth: "Moderate to steep banks",
     shelter: "Low shelter",
     depthPower: 0.74,
@@ -43,7 +44,7 @@ const SPOT_DATA_PROFILES = {
     dataNeeds: ["sandbars", "wavePartitions", "bathymetry", "observations"],
   },
   campeche: {
-    beachAxis: "Long ESE shoreline",
+    beachAxis: "Long south-facing shoreline",
     depth: "Broad shifting sandbars",
     shelter: "Partial island influence",
     depthPower: 0.58,
@@ -158,13 +159,13 @@ const BEACHES = [
     name: "Praia Mole",
     lat: -27.6031328,
     lon: -48.4333337,
-    offshoreWind: 285,
-    swellCenter: 115,
-    swellSpread: 78,
+    offshoreWind: 300,
+    swellCenter: 128,
+    swellSpread: 80,
     idealHeight: [0.7, 1.8],
     maxHeight: 2.8,
-    idealTide: 0.22,
-    tideSpread: 0.55,
+    idealTide: 0.4,
+    tideSpread: 0.5,
     note: "Exposed east beach",
     region: "East shore",
     exposure: "Open E/ESE",
@@ -180,13 +181,13 @@ const BEACHES = [
     name: "Joaquina",
     lat: -27.6343625,
     lon: -48.4542951,
-    offshoreWind: 285,
-    swellCenter: 118,
-    swellSpread: 82,
+    offshoreWind: 315,
+    swellCenter: 148,
+    swellSpread: 85,
     idealHeight: [0.8, 2.1],
-    maxHeight: 3.0,
-    idealTide: 0.05,
-    tideSpread: 0.52,
+    maxHeight: 3.2,
+    idealTide: 0.4,
+    tideSpread: 0.6,
     note: "Open east-southeast exposure",
     region: "East shore",
     exposure: "Open ESE",
@@ -202,16 +203,16 @@ const BEACHES = [
     name: "Campeche",
     lat: -27.6859258,
     lon: -48.4803787,
-    offshoreWind: 292,
-    swellCenter: 124,
-    swellSpread: 78,
-    idealHeight: [0.7, 1.9],
-    maxHeight: 2.8,
-    idealTide: 0.18,
-    tideSpread: 0.55,
-    note: "Long east-facing beach",
+    offshoreWind: 318,
+    swellCenter: 174,
+    swellSpread: 70,
+    idealHeight: [0.8, 2.0],
+    maxHeight: 2.9,
+    idealTide: 0.5,
+    tideSpread: 0.5,
+    note: "Long south-facing beach",
     region: "South-east shore",
-    exposure: "Open E/ESE",
+    exposure: "Open S/SSE",
     breakType: "Long sandbar beachbreak",
     profile:
       "Long, exposed beach with shifting banks and room for different peaks. It can produce longer right-hand sections around the known banks, but one end can work while another is soft or bumpy.",
@@ -224,16 +225,16 @@ const BEACHES = [
     name: "Barra da Lagoa",
     lat: -27.5712235,
     lon: -48.4270278,
-    offshoreWind: 282,
-    swellCenter: 108,
-    swellSpread: 65,
+    offshoreWind: 250,
+    swellCenter: 75,
+    swellSpread: 60,
     idealHeight: [0.5, 1.4],
-    maxHeight: 2.1,
-    idealTide: 0.18,
-    tideSpread: 0.5,
-    note: "Sheltered east beach",
+    maxHeight: 1.9,
+    idealTide: 0.5,
+    tideSpread: 0.65,
+    note: "Sheltered cove, works all tides",
     region: "East shore",
-    exposure: "Filtered E/ENE",
+    exposure: "Filtered ENE/E",
     breakType: "Cove and channel beachbreak",
     profile:
       "More protected than the open east beaches, with a softer channel-side feel. It is often more approachable when Mole or Mocambique are too raw.",
@@ -246,13 +247,13 @@ const BEACHES = [
     name: "Mocambique",
     lat: -27.524143,
     lon: -48.4172118,
-    offshoreWind: 285,
-    swellCenter: 105,
-    swellSpread: 82,
-    idealHeight: [0.7, 2.0],
-    maxHeight: 3.0,
-    idealTide: 0.0,
-    tideSpread: 0.58,
+    offshoreWind: 312,
+    swellCenter: 118,
+    swellSpread: 88,
+    idealHeight: [0.7, 2.2],
+    maxHeight: 3.2,
+    idealTide: 0.5,
+    tideSpread: 0.6,
     note: "Broad exposed beach",
     region: "East/north-east shore",
     exposure: "Very open E/ENE",
@@ -269,12 +270,12 @@ const BEACHES = [
     lat: -27.4583612,
     lon: -48.3750063,
     offshoreWind: 292,
-    swellCenter: 112,
+    swellCenter: 118,
     swellSpread: 72,
-    idealHeight: [0.7, 1.8],
-    maxHeight: 2.7,
-    idealTide: 0.12,
-    tideSpread: 0.52,
+    idealHeight: [0.7, 1.9],
+    maxHeight: 2.8,
+    idealTide: 0.4,
+    tideSpread: 0.5,
     note: "Northeast island exposure",
     region: "North-east shore",
     exposure: "Open ENE/E",
@@ -290,12 +291,12 @@ const BEACHES = [
     name: "Brava",
     lat: -27.3992523,
     lon: -48.4137268,
-    offshoreWind: 250,
-    swellCenter: 75,
-    swellSpread: 64,
-    idealHeight: [0.6, 1.6],
+    offshoreWind: 268,
+    swellCenter: 88,
+    swellSpread: 60,
+    idealHeight: [0.6, 1.7],
     maxHeight: 2.5,
-    idealTide: 0.28,
+    idealTide: 0.4,
     tideSpread: 0.5,
     note: "North shore angle",
     region: "North shore",
@@ -312,14 +313,14 @@ const BEACHES = [
     name: "Praia dos Ingleses",
     lat: -27.4294468,
     lon: -48.3965338,
-    offshoreWind: 245,
-    swellCenter: 70,
-    swellSpread: 70,
-    idealHeight: [0.5, 1.6],
-    minSurfHeight: 0.6,
-    maxHeight: 2.5,
-    idealTide: 0.25,
-    tideSpread: 0.5,
+    offshoreWind: 220,
+    swellCenter: 52,
+    swellSpread: 62,
+    idealHeight: [0.8, 1.7],
+    minSurfHeight: 0.7,
+    maxHeight: 2.2,
+    idealTide: 0.5,
+    tideSpread: 0.6,
     note: "North-east beach near Ingleses",
     region: "North shore",
     exposure: "Partly open NE/E",
@@ -335,13 +336,13 @@ const BEACHES = [
     name: "Matadeiro",
     lat: -27.7543668,
     lon: -48.4989504,
-    offshoreWind: 318,
-    swellCenter: 145,
-    swellSpread: 76,
-    idealHeight: [0.7, 1.8],
-    maxHeight: 2.7,
-    idealTide: 0.2,
-    tideSpread: 0.55,
+    offshoreWind: 228,
+    swellCenter: 125,
+    swellSpread: 70,
+    idealHeight: [0.6, 1.6],
+    maxHeight: 2.4,
+    idealTide: 0.35,
+    tideSpread: 0.5,
     note: "South island cove",
     region: "South shore",
     exposure: "Open SE/SSE",
@@ -357,12 +358,13 @@ const BEACHES = [
     name: "Armacao",
     lat: -27.7360351,
     lon: -48.5079032,
-    offshoreWind: 318,
-    swellCenter: 145,
-    swellSpread: 72,
+    offshoreWind: 238,
+    swellCenter: 130,
+    swellSpread: 58,
     idealHeight: [0.6, 1.5],
-    maxHeight: 2.4,
-    idealTide: 0.25,
+    minSurfHeight: 0.65,
+    maxHeight: 2.1,
+    idealTide: 0.5,
     tideSpread: 0.5,
     note: "Protected south beach",
     region: "South shore",
@@ -379,13 +381,13 @@ const BEACHES = [
     name: "Lagoinha do Leste",
     lat: -27.7740217,
     lon: -48.4868801,
-    offshoreWind: 315,
-    swellCenter: 138,
-    swellSpread: 76,
-    idealHeight: [0.7, 1.9],
-    maxHeight: 2.8,
-    idealTide: 0.12,
-    tideSpread: 0.55,
+    offshoreWind: 312,
+    swellCenter: 135,
+    swellSpread: 82,
+    idealHeight: [0.8, 2.0],
+    maxHeight: 3.0,
+    idealTide: 0.5,
+    tideSpread: 0.6,
     note: "Remote south-east exposure",
     region: "South-east shore",
     exposure: "Very open SE/ESE",
@@ -432,7 +434,11 @@ const UI = {
     airWater: (air, water) => `${air}°C ar · ${water}°C água`,
     day: "Dia",
     hour: "Hora",
+    hourAria: "Hora da previsão",
+    controlsAria: "Controles da previsão",
+    legendAria: "Legenda da pontuação",
     today: "Hoje",
+    now: "Agora",
     daySummary: "Resumo do dia",
     bestBets: "Melhores opções",
     topPick: (label) => `Top do dia · ${label}`,
@@ -470,7 +476,11 @@ const UI = {
     airWater: (air, water) => `${air}°C air · ${water}°C water`,
     day: "Day",
     hour: "Hour",
+    hourAria: "Forecast hour",
+    controlsAria: "Forecast controls",
+    legendAria: "Score legend",
     today: "Today",
+    now: "Now",
     daySummary: "The day at a glance",
     bestBets: "Best bets",
     topPick: (label) => `Top pick · ${label}`,
@@ -577,8 +587,8 @@ const BEACH_PT = {
 // Portuguese for the spot-profile phrases that surface in reasons / contrast text.
 const PROFILE_PT = {
   "praia-mole": { depth: "Rampa curta e íngreme perto da praia", shelter: "Pouco abrigo", beachAxis: "Enseada L/LSE" },
-  joaquina: { depth: "Bancos de moderados a íngremes", shelter: "Pouco abrigo", beachAxis: "Praia aberta a LSE" },
-  campeche: { depth: "Bancos largos e instáveis", shelter: "Influência parcial da ilha", beachAxis: "Litoral longo a LSE" },
+  joaquina: { depth: "Bancos de moderados a íngremes", shelter: "Pouco abrigo", beachAxis: "Praia aberta de L a S" },
+  campeche: { depth: "Bancos largos e instáveis", shelter: "Influência parcial da ilha", beachAxis: "Litoral longo voltado ao sul" },
   "barra-da-lagoa": { depth: "Areia influenciada pelo canal", shelter: "Abrigo médio a alto", beachAxis: "Enseada filtrada LNE/L" },
   mocambique: { depth: "Plataforma de areia longa e exposta", shelter: "Pouco abrigo", beachAxis: "Costa muito aberta LNE/L" },
   santinho: { depth: "Enseada com efeito das pontas", shelter: "Abrigo moderado nas pontas", beachAxis: "Enseada LNE/L" },
@@ -682,6 +692,12 @@ function syncStaticChrome() {
   const footer = document.querySelector(".app-footer span");
   if (footer) footer.textContent = t("footer");
 
+  const controlStrip = document.querySelector(".control-strip");
+  if (controlStrip) controlStrip.setAttribute("aria-label", t("controlsAria"));
+  const legend = document.querySelector(".map-legend");
+  if (legend) legend.setAttribute("aria-label", t("legendAria"));
+
+  renderLegend();
   updateStatusBar();
 
   if (elements.langToggle) {
@@ -689,7 +705,6 @@ function syncStaticChrome() {
       button.setAttribute("aria-pressed", button.dataset.lang === state.lang);
     });
   }
-
 }
 
 function renderControls() {
@@ -713,12 +728,13 @@ function renderControls() {
     elements.dayControls.append(button);
   }
 
-  elements.hourControls.innerHTML = "";
+  const nowHour = initialSelectedHour();
+  const isNow = state.selectedDayOffset === 0 && state.selectedHour === nowHour;
   elements.hourControls.innerHTML = `
     <div class="hour-slider-shell">
       <div class="hour-slider-top">
         <output>${escapeHtml(formatHour(state.selectedHour))}</output>
-        <span>${escapeHtml(formatHour(HOUR_MIN))}-${escapeHtml(formatHour(HOUR_MAX))}</span>
+        <button type="button" class="now-chip" data-now aria-pressed="${isNow}">${escapeHtml(t("now"))}</button>
       </div>
       <input
         type="range"
@@ -726,7 +742,7 @@ function renderControls() {
         max="${HOUR_MAX}"
         step="1"
         value="${state.selectedHour}"
-        aria-label="Forecast hour"
+        aria-label="${escapeHtml(t("hourAria"))}"
       />
       <div class="hour-ticks" aria-hidden="true">
         <span>06</span>
@@ -739,10 +755,21 @@ function renderControls() {
   `;
 
   const slider = elements.hourControls.querySelector('input[type="range"]');
+  const output = elements.hourControls.querySelector(".hour-slider-top output");
   slider.addEventListener("input", () => {
     state.selectedHour = Number(slider.value);
-    render();
+    if (output) output.textContent = formatHour(state.selectedHour); // instant readout
+    renderData(); // skip renderControls so the slider survives the drag
   });
+
+  const nowButton = elements.hourControls.querySelector("[data-now]");
+  if (nowButton) {
+    nowButton.addEventListener("click", () => {
+      state.selectedDayOffset = 0;
+      state.selectedHour = initialSelectedHour();
+      render();
+    });
+  }
 }
 
 function initializeMap() {
@@ -940,6 +967,7 @@ async function loadForecasts() {
   const fulfilled = results.filter((result) => result.status === "fulfilled");
 
   state.forecasts.clear();
+  scoredSampleCache.clear();
   for (const result of fulfilled) {
     state.forecasts.set(result.value.beachId, result.value);
   }
@@ -1014,7 +1042,7 @@ async function fetchJson(url) {
       return response.json();
     } catch (error) {
       lastError = error;
-      await delay(300 + attempt * 500);
+      if (attempt < 2) await delay(300 + attempt * 500); // no dead backoff after the last try
     }
   }
 
@@ -1028,9 +1056,19 @@ function delay(milliseconds) {
 }
 
 function render() {
+  renderControls();
+  renderData();
+}
+
+// Everything that reacts to the selected day/hour/beach, WITHOUT rebuilding the
+// controls — so dragging the hour slider stays smooth (the slider element is not
+// torn down mid-drag). Scoring is memoized, so this stays cheap to call live.
+function renderData() {
   const view = getForecastView();
 
-  renderControls();
+  const dashboard = document.querySelector(".dashboard");
+  if (dashboard) dashboard.setAttribute("aria-busy", String(Boolean(state.loading)));
+
   renderTemperatureStrip(view);
   syncRadarToSelection();
   updateRadarLayer();
@@ -1061,7 +1099,7 @@ function renderLoading() {
 }
 
 function renderError() {
-  elements.rankedList.innerHTML = `<div class="empty-state">${escapeHtml(t("errorState"))}</div>`;
+  elements.rankedList.innerHTML = `<div class="empty-state" role="alert">${escapeHtml(t("errorState"))}</div>`;
   elements.selectedSummary.innerHTML = "";
   elements.metricGrid.innerHTML = "";
   elements.timelinePanel.innerHTML = "";
@@ -1114,6 +1152,7 @@ function getNearbyScoredBeachEntries(beach, dayOffset, hour, limit = 3) {
 }
 
 function bestScoredEntry(entries) {
+  if (!entries.length) return null;
   return entries.reduce((best, entry) =>
     entry.scored.score.score > best.scored.score.score ? entry : best,
   );
@@ -1336,11 +1375,11 @@ function renderTimeline(view = getForecastView()) {
         .map(({ hour, scored }) => {
           const score = scored.score.score;
           return `
-            <button class="time-bar" type="button" aria-current="${hour === view.hour}" data-hour="${hour}">
+            <button class="time-bar" type="button" aria-current="${hour === view.hour}" data-hour="${hour}" aria-label="${String(hour).padStart(2, "0")}:00 · ${score} ${escapeHtml(scored.score.label)}">
               <span class="bar-column">
-                <span class="bar-fill ${pinClass(score)}" style="height: ${Math.max(10, score * 1.34)}px"></span>
+                <span class="bar-fill ${pinClass(score)}" style="height: ${Math.max(12, score * 1.34)}px"></span>
               </span>
-              <span class="time-score">${score}</span>
+              <span class="time-score ${pinClass(score)}">${score}</span>
               <span class="time-label">${String(hour).padStart(2, "0")}</span>
             </button>
           `;
@@ -1766,7 +1805,9 @@ function describeCoastalFit(beach, sample, coastalScore) {
   const profile = spotDataProfile(beach);
   const direction = sample.swellDirection ?? sample.waveDirection;
   const angleFit = directionWindowScore(direction, beach.swellCenter, beach.swellSpread);
-  const energy = swellEnergy(sample.swellHeight ?? sample.waveHeight, sample.swellPeriod ?? sample.wavePeriod);
+  const energy = sizeMagnitude(
+    effectiveBreakingHeight(beach, sample.swellHeight ?? sample.waveHeight, sample.swellPeriod ?? sample.wavePeriod),
+  );
   const pt = state.lang === "pt";
 
   let scoreKey = "uncertain";
@@ -1821,12 +1862,20 @@ function describeCoastalFit(beach, sample, coastalScore) {
   };
 }
 
+function tideStateWord(state01, pt) {
+  if (!Number.isFinite(state01)) return pt ? "média" : "mid";
+  if (state01 <= 0.34) return pt ? "baixa" : "low";
+  if (state01 >= 0.66) return pt ? "cheia" : "high";
+  return pt ? "média" : "mid";
+}
+
 function describeTide(beach, sample, score) {
-  const tideDiff = Math.abs((sample.seaLevel ?? 0) - beach.idealTide);
   const pt = state.lang === "pt";
+  const state01 = sample.tideState;
+  const tideDiff = Number.isFinite(state01) ? Math.abs(state01 - beach.idealTide) : NaN;
 
   let fitKey = "unclear";
-  if (Number.isFinite(sample.seaLevel)) {
+  if (Number.isFinite(tideDiff) && Number.isFinite(beach.tideSpread)) {
     if (tideDiff <= beach.tideSpread * 0.25) fitKey = "veryClose";
     else if (tideDiff <= beach.tideSpread * 0.55) fitKey = "close";
     else if (tideDiff <= beach.tideSpread) fitKey = "edge";
@@ -1849,12 +1898,14 @@ function describeTide(beach, sample, score) {
       }[fitKey];
 
   const trend = score.tideTrend.toLowerCase();
+  const nowWord = tideStateWord(state01, pt);
+  const prefWord = tideStateWord(beach.idealTide, pt);
 
   return {
     short: pt ? `maré ${trend}, ${fitText}` : `${trend} tide is ${fitText}`,
     detail: pt
-      ? `O alvo do modelo aqui fica por volta de ${formatSigned(beach.idealTide)} m. O nível atual é ${formatSigned(sample.seaLevel)} m, ${trend}, e ${fitText}.`
-      : `The model target here is around ${formatSigned(beach.idealTide)} m. Current sea level is ${formatSigned(sample.seaLevel)} m, ${trend}, and ${fitText}.`,
+      ? `Esta praia costuma preferir maré ${prefWord}. Agora está ${nowWord} (${formatSigned(sample.seaLevel)} m), ${trend}, e ${fitText}.`
+      : `This beach tends to prefer a ${prefWord} tide. Right now it is ${nowWord} (${formatSigned(sample.seaLevel)} m), ${trend}, and ${fitText}.`,
   };
 }
 
@@ -2028,8 +2079,8 @@ function coastalContrastReason(selectedScored, otherScored) {
 }
 
 function tideContrastReason(selectedScored, otherScored) {
-  const selectedDiff = Math.abs((selectedScored.sample.seaLevel ?? 0) - selectedScored.beach.idealTide);
-  const otherDiff = Math.abs((otherScored.sample.seaLevel ?? 0) - otherScored.beach.idealTide);
+  const selectedDiff = Math.abs((selectedScored.sample.tideState ?? 0.5) - selectedScored.beach.idealTide);
+  const otherDiff = Math.abs((otherScored.sample.tideState ?? 0.5) - otherScored.beach.idealTide);
   const better = selectedDiff < otherDiff ? selectedScored : otherScored;
 
   return state.lang === "pt"
@@ -2103,7 +2154,20 @@ function toRadians(degrees) {
   return (degrees * Math.PI) / 180;
 }
 
+// Scored samples are pure given (beach, day, hour, language) and the loaded
+// forecast set, so memoize them: a single slider drag re-reads ~156 beach×hour
+// cells per step, and describeDay/timeline re-score the same cells again.
+const scoredSampleCache = new Map();
+
 function getScoredSample(beach, dayOffset, hour) {
+  const key = `${state.lang}:${beach.id}:${dayOffset}:${hour}`;
+  if (scoredSampleCache.has(key)) return scoredSampleCache.get(key);
+  const result = computeScoredSample(beach, dayOffset, hour);
+  scoredSampleCache.set(key, result);
+  return result;
+}
+
+function computeScoredSample(beach, dayOffset, hour) {
   const forecast = state.forecasts.get(beach.id);
   if (!forecast) return null;
 
@@ -2143,6 +2207,7 @@ function getScoredSample(beach, dayOffset, hour) {
 
   const nextMarineIndex = Math.min(marineIndex + 1, forecast.marine.time.length - 1);
   sample.nextSeaLevel = valueAt(forecast.marine, "sea_level_height_msl", nextMarineIndex);
+  sample.tideState = tideStateAt(forecast.marine, marineIndex);
 
   return {
     beach,
@@ -2151,12 +2216,51 @@ function getScoredSample(beach, dayOffset, hour) {
   };
 }
 
-// Deep-water energy flux is proportional to H^2 * T. We keep the proportional
-// term and normalize against a reference, rather than the linear height-fit the
-// prototype used. ENERGY_REF ~= a very good Floripa day (1.8 m @ ~12 s clean swell).
-const ENERGY_REF = 30;
+// Normalize the sea-level reading to a 0 (low) .. 1 (high) tide state within the
+// local tidal range. Open-Meteo's sea_level_height_msl is referenced to the
+// global MSL datum (not the local chart datum) and carries a surge/pressure
+// residual, so the absolute metre value is not a reliable tide phase — but its
+// position inside the surrounding ±18 h min/max window is.
+function tideStateAt(marine, index) {
+  const levels = marine?.sea_level_height_msl;
+  if (!Array.isArray(levels)) return 0.5;
+  const here = Number(levels[index]);
+  if (!Number.isFinite(here)) return 0.5;
+
+  const lo = Math.max(0, index - 18);
+  const hi = Math.min(levels.length - 1, index + 18);
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = lo; i <= hi; i += 1) {
+    const value = Number(levels[i]);
+    if (!Number.isFinite(value)) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  if (!Number.isFinite(min) || max - min < 0.1) return 0.5; // flat / no usable range
+  return clamp((here - min) / (max - min), 0, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Scoring model — "clean-swell power, then degrade for wind", the shape real
+// rating engines use (MSW / Surf-Forecast / Surfline LOLA). Each physical input
+// enters the score exactly once:
+//   size    -> shelter-attenuated breaking height, soft-knee saturated
+//   period  -> periodCurve quality multiplier
+//   chop    -> windsea-contamination cleanliness
+//   angle   -> directionFit (swell vs the beach's window)
+//   wind    -> windQualityFactor (multiplicative gate)
+//   shelter -> attenuates the breaking height, so sheltered bays read smaller on
+//              average (they are "too small" more often) yet survive as the
+//              clean-up call on oversized days when open beaches close out.
+// SIZE_REF is the main calibration knob: the breaking height (m) at which the
+// size term reaches 0.5. Lower it for a friendlier scale, raise it for stricter.
+// ---------------------------------------------------------------------------
+const SIZE_REF = 0.9;
+const ENERGY_REF = 14; // H^2*T of a fun chest-high day; used only by the prose layer
 const DEFAULT_MIN_SURF_HEIGHT = 0.6;
-const DEFAULT_FULL_SURF_HEIGHT = 0.85;
+const DEFAULT_FULL_SURF_HEIGHT = 0.95;
+const SHELTER_ENERGY_LOSS = 0.4; // a fully sheltered bay sheds ~40% of the open-coast breaking height
 
 function waveEnergy(height, period) {
   if (!Number.isFinite(height) || !Number.isFinite(period) || height <= 0 || period <= 0) {
@@ -2165,15 +2269,43 @@ function waveEnergy(height, period) {
   return height * height * period;
 }
 
-// Period-quality curve: windsea below ~8 s, solid groundswell 10-13 s, premium 13 s+.
+// Deep-water swell shoals into a taller breaker the longer its period (energy
+// focuses as the wave feels bottom). A gentle ±~10% across the realistic band.
+function breakingHeight(height, period) {
+  if (!Number.isFinite(height) || height <= 0) return 0;
+  const t = Number.isFinite(period) && period > 0 ? period : 9;
+  return height * clamp((t / 11) ** 0.25, 0.82, 1.18);
+}
+
+function shelterAttenuation(beach) {
+  const shelter = clamp(spotDataProfile(beach).shelterIndex ?? 0.35, 0, 1);
+  return 1 - SHELTER_ENERGY_LOSS * shelter;
+}
+
+// Effective breaking height at the beach (after shelter loss). One size scale,
+// reused by the score, the size-aware wind shield, and the prose layer.
+function effectiveBreakingHeight(beach, height, period) {
+  return breakingHeight(height, period) * shelterAttenuation(beach);
+}
+
+// Soft-knee size term (0..1): diminishing returns with no early saturation, so
+// the whole 0.6-3.5 m breaking-height range stays separable.
+function sizeMagnitude(hb) {
+  if (!Number.isFinite(hb) || hb <= 0) return 0;
+  return (hb * hb) / (hb * hb + SIZE_REF * SIZE_REF);
+}
+
+// Period-quality multiplier: windsea ~6 s heavily docked, solid groundswell
+// 10-13 s nearly full, premium 14 s+ topped out. Smooth (no slope kinks).
 function periodCurve(period) {
-  if (!Number.isFinite(period)) return 0.45;
-  if (period <= 6) return 0.1;
-  if (period <= 8) return 0.1 + (period - 6) * 0.15; // 0.10 -> 0.40
-  if (period <= 10) return 0.4 + (period - 8) * 0.15; // 0.40 -> 0.70
-  if (period <= 13) return 0.7 + (period - 10) * 0.0833; // 0.70 -> 0.95
-  if (period <= 16) return 0.95 + (period - 13) * 0.0167; // 0.95 -> 1.00
-  return 1;
+  if (!Number.isFinite(period)) return 0.35;
+  if (period <= 6) return 0.4;
+  if (period >= 16) return 1;
+  if (period <= 13) {
+    const x = (period - 6) / 7; // 0..1 across 6-13 s
+    return 0.4 + 0.55 * (x * x * (3 - 2 * x)); // smoothstep 0.40 -> 0.95
+  }
+  return 0.95 + 0.05 * ((period - 13) / 3); // 0.95 -> 1.00 across 13-16 s
 }
 
 function surfableHeightFloor(beach) {
@@ -2185,16 +2317,18 @@ function fullySurfableHeight(beach) {
   if (Number.isFinite(beach.fullSurfHeight) && beach.fullSurfHeight > floor) {
     return beach.fullSurfHeight;
   }
-  return Math.max(DEFAULT_FULL_SURF_HEIGHT, floor + 0.25);
+  return Math.max(DEFAULT_FULL_SURF_HEIGHT, floor + 0.3);
 }
 
+// Surfable-floor gate (0..1), continuous at the floor (both branches meet at
+// 0.9): well below the floor the spot is barely breaking; at/above it is ready.
 function surfableHeightFactor(height, beach) {
-  if (!Number.isFinite(height)) return 0.75;
+  if (!Number.isFinite(height)) return 0.85;
 
   const floor = surfableHeightFloor(beach);
   if (height < floor) {
     const ratio = clamp(height / floor, 0, 1);
-    return clamp(0.25 + 0.57 * ratio ** 1.35, 0.25, 0.82);
+    return clamp(0.3 + 0.6 * ratio ** 1.3, 0.3, 0.9);
   }
 
   const full = fullySurfableHeight(beach);
@@ -2202,45 +2336,41 @@ function surfableHeightFactor(height, beach) {
   return clamp(0.9 + 0.1 * ratio ** 0.75, 0.9, 1);
 }
 
-function lowHeightScoreCap(height, beach) {
-  if (!Number.isFinite(height)) return 100;
-
-  const floor = surfableHeightFloor(beach);
-  if (height >= floor) return 100;
-
-  const tiny = floor * 0.7;
-  if (height <= tiny) return 36;
-
-  return Math.round(scale(height, tiny, floor, 36, 51));
-}
-
-// Multiplicative wind gate (0..1): glassy and light-offshore groom the face;
-// onshore wind degrades steeply past ~9 km/h; strong wind from any direction caps it.
-function windQualityFactor(beach, sample) {
+// Multiplicative wind gate (0..1). Glassy is good and clean light-offshore is
+// ideal (and never scores below glassy); cross-shore adds chop; onshore degrades
+// from the ~13 km/h whitecap threshold; bigger swell shrugs wind off; gusts and
+// very strong wind from any quarter taper it toward zero. Continuous throughout.
+function windQualityFactor(beach, sample, sizeMag = 0.5) {
   const speed = sample.windSpeed;
   const gusts = sample.windGusts;
-  if (!Number.isFinite(speed)) return 0.6;
-  if (speed < 4) return 1; // glassy
+  if (!Number.isFinite(speed) || speed <= 0) return 0.9;
 
   const off = angularDiff(sample.windDirection, beach.offshoreWind); // 0 offshore .. 180 onshore
-  const dirComp = Math.cos((off * Math.PI) / 180); // +1 offshore .. -1 onshore
+  const rad = (off * Math.PI) / 180;
+  const dirComp = Math.cos(rad); // +1 offshore .. -1 onshore
+  const crossComp = Math.abs(Math.sin(rad)); // 0 aligned .. 1 dead cross
+  const sizeShield = clamp(1 - 0.4 * sizeMag, 0.6, 1); // bigger swell resists wind
+  const dirWeight = smoothstep(speed, 0, 6); // wind angle barely matters when near-calm
 
   let factor;
   if (dirComp >= 0) {
-    const groom = (dirComp * Math.min(speed, 20)) / 20; // builds to ~12-20 km/h
-    const tooStrong = Math.max(0, speed - 30) / 40; // strong offshore over-holds / bumps
-    factor = clamp(0.8 + 0.2 * groom - 0.3 * tooStrong, 0, 1);
+    // Offshore-ish: base 0.9, building to 1.0 with clean light offshore.
+    factor = 0.9 + 0.1 * dirComp * smoothstep(speed, 0, 10);
+    factor -= dirWeight * dirComp * clamp((speed - 32) / 60, 0, 0.28); // strong offshore over-holds faces
   } else {
     const onshore = -dirComp; // 0..1
-    const severity = clamp((speed - 9) / 19, 0, 1); // ~no harm < 9, severe by ~28 km/h
-    factor = clamp(1 - onshore * (0.25 + 0.75 * severity), 0, 1);
+    const severity = clamp((speed - 11) / 24, 0, 1) ** 1.3; // whitecaps ~13+, blown by ~35
+    factor = 1 - dirWeight * onshore * (0.28 + 0.72 * severity) * sizeShield;
   }
 
-  const gustSpread = Math.max(0, (Number.isFinite(gusts) ? gusts : speed) - speed);
-  factor *= clamp(1 - gustSpread / 40, 0, 1);
+  // Cross-shore chop bites even when nominally offshore.
+  factor -= crossComp * clamp((speed - 13) / 32, 0, 1) * 0.32 * sizeShield;
 
-  if (speed > 45) factor = Math.min(factor, 0.25); // strong wind, any direction
-  return clamp(factor, 0, 1);
+  const gustSpread = Math.max(0, (Number.isFinite(gusts) ? gusts : speed) - speed);
+  factor *= clamp(1 - gustSpread / 45, 0.4, 1);
+  factor *= clamp(1 - Math.max(0, speed - 35) / 45, 0.06, 1); // strong wind, any direction
+
+  return clamp(factor, 0.03, 1);
 }
 
 function scoreSample(beach, sample, dayOffset) {
@@ -2250,42 +2380,58 @@ function scoreSample(beach, sample, dayOffset) {
   const rain = sample.precipitationProbability ?? 0;
   const cloud = sample.cloudCover ?? 0;
 
-  // Score swell partitions, not blended wave height. Primary + half the secondary
-  // swell make up clean energy; the wind-wave partition is chop (contamination).
+  // Clean-swell energy = primary + the secondary swell weighted by its OWN period
+  // and direction quality (a long-period in-window secondary is real rideable
+  // energy; a short off-window one is just chop). Wind-wave = contamination.
   const ePrimary = waveEnergy(swellHeight, swellPeriod);
-  const eSecondary = waveEnergy(sample.secondarySwellHeight, sample.secondarySwellPeriod);
+  const eSecondaryRaw = waveEnergy(sample.secondarySwellHeight, sample.secondarySwellPeriod);
+  const secondaryWeight = clamp(
+    periodCurve(sample.secondarySwellPeriod) *
+      directionWindowScore(sample.secondarySwellDirection, beach.swellCenter, beach.swellSpread),
+    0.15,
+    0.85,
+  );
+  const eSecondary = secondaryWeight * eSecondaryRaw;
   const eWind = waveEnergy(sample.windWaveHeight, sample.windWavePeriod);
-  const eSwell = ePrimary + 0.5 * eSecondary;
-  const eTotal = ePrimary + eSecondary + eWind || 1e-6;
+  const eSwell = ePrimary + eSecondary;
 
-  const sizeFit = clamp(Math.sqrt(eSwell / ENERGY_REF), 0, 1); // sqrt -> diminishing returns
+  // Size from the shelter-attenuated breaking height (one size scale everywhere).
+  const hb = effectiveBreakingHeight(beach, swellHeight, swellPeriod);
+  const sizeMag = sizeMagnitude(hb);
   const periodFit = periodCurve(swellPeriod);
   const sizeReadiness = surfableHeightFactor(swellHeight, beach);
-  const windseaFrac = clamp(eWind / eTotal, 0, 1);
-  const cleanliness = clamp(1 - 0.8 * windseaFrac, 0, 1); // chop on the swell drops quality
+
+  // Chop = windsea share of (windsea + clean swell), on a shared energy basis.
+  const windseaFrac = eWind + eSwell > 0 ? clamp(eWind / (eWind + eSwell), 0, 1) : 0;
+  const cleanliness = clamp(1 - 0.95 * windseaFrac, 0, 1);
+
+  // Closeout: period-aware (long groundswell holds bigger), smooth toward ~0.15.
+  const closeoutHeight =
+    Number.isFinite(beach.maxHeight) && beach.maxHeight > 0
+      ? beach.maxHeight * clamp((swellPeriod / 11) ** 0.3, 0.85, 1.25)
+      : Infinity;
   const oversize =
-    Number.isFinite(beach.maxHeight) && swellHeight > beach.maxHeight
-      ? clamp(1 - (swellHeight - beach.maxHeight) / beach.maxHeight, 0.3, 1) // too big -> closes out
+    Number.isFinite(swellHeight) && swellHeight > closeoutHeight
+      ? clamp(1 - 0.85 * ((swellHeight - closeoutHeight) / (0.5 * beach.maxHeight)), 0.15, 1)
       : 1;
 
-  const swellQuality = clamp(0.55 * sizeFit + 0.45 * periodFit, 0, 1) * cleanliness * oversize * sizeReadiness;
+  const swellQuality = clamp(sizeMag * periodFit * cleanliness * oversize * sizeReadiness, 0, 1);
   const directionFit = directionWindowScore(swellDirection, beach.swellCenter, beach.swellSpread);
-  const potential = swellQuality * (0.6 + 0.4 * directionFit); // direction modulates, never zeroes
+  const potential = swellQuality * (0.45 + 0.55 * directionFit); // direction modulates, never zeroes
 
-  // Wind multiplies the swell potential instead of being a separate additive slice.
-  const windFactor = windQualityFactor(beach, sample);
-  const core = potential * (0.35 + 0.65 * windFactor);
+  // Wind multiplies the clean-swell potential; a blown-out day keeps little of it.
+  const windFactor = windQualityFactor(beach, sample, sizeMag);
+  const core = potential * (0.18 + 0.82 * windFactor);
 
-  // Context terms are gated by core so they cannot lift a flat or blown-out hour.
-  const tideFit = tideScore(sample.seaLevel, beach.idealTide, beach.tideSpread);
-  const coastalFit = coastalFitScore(beach, sample) / 100;
+  // Context (coastal depth fit, tide, weather) is small and gated by core so it
+  // cannot lift a flat or blown-out hour. Direction and shelter already live in core.
+  const tideFit = tideScore(sample.tideState, beach.idealTide, beach.tideSpread);
+  const coastalFit = coastalFitScore(beach, sizeMag) / 100;
   const weatherFit = clamp(1 - rain / 170 - cloud / 500, 0.18, 1);
-  const context = 0.6 * coastalFit + 0.25 * tideFit + 0.15 * weatherFit;
-  const coreGate = clamp(core * 1.5, 0, 1);
+  const context = 0.55 * coastalFit + 0.28 * tideFit + 0.17 * weatherFit;
+  const coreGate = smoothstep(core, 0.08, 0.5);
 
-  const rawScore = Math.round(clamp(100 * (0.82 * core + 0.18 * context * coreGate), 0, 100));
-  const heightCap = lowHeightScoreCap(swellHeight, beach);
-  const score = Math.min(rawScore, heightCap);
+  const score = Math.round(clamp(100 * (0.85 * core + 0.15 * context * coreGate), 0, 100));
   const confidence = [94, 87, 76, 64][dayOffset] ?? 60;
 
   const windDiff = angularDiff(sample.windDirection, beach.offshoreWind);
@@ -2306,15 +2452,15 @@ function scoreSample(beach, sample, dayOffset) {
     },
     detail: {
       energy: 0.49 * eSwell, // approx kW/m of clean swell, for the prose layer
+      breakingHeight: hb,
       windseaFrac,
-      sizeFit,
+      sizeMag,
       sizeReadiness,
       periodFit,
       directionFit,
       windFactor,
       cleanliness,
       oversize,
-      heightCap,
       minSurfHeight: surfableHeightFloor(beach),
     },
     windQuality,
@@ -2403,47 +2549,47 @@ function buildReasons(context) {
 }
 
 function directionWindowScore(direction, center, spread) {
-  if (!Number.isFinite(direction)) return 0.5;
+  if (!Number.isFinite(direction) || !Number.isFinite(center) || !Number.isFinite(spread) || spread <= 0) {
+    return 0.5;
+  }
   const diff = angularDiff(direction, center);
-  if (diff >= spread) return 0.08;
+  if (diff >= spread) return 0.06;
   const normalized = diff / spread;
-  return clamp(1 - normalized ** 1.55, 0.08, 1);
+  // Gentle exponent so the configured spread is the real window (the floor is
+  // only reached near diff == spread, not at ~0.95 of it).
+  return clamp(1 - normalized ** 1.15, 0.06, 1);
 }
 
-function tideScore(level, ideal, spread) {
-  if (!Number.isFinite(level)) return 0.5;
-  const diff = Math.abs(level - ideal);
-  if (diff >= spread) return 0.24;
-  return clamp(1 - (diff / spread) ** 1.4, 0.24, 1);
+// Tide fit on a normalized 0 (low) .. 1 (high) state vs the beach's preference.
+// We compare a daily-normalized state, not absolute MSL metres: Open-Meteo's
+// sea_level_height_msl is referenced to the global datum and carries a
+// surge/pressure residual, so absolute height is not a reliable tide phase.
+function tideScore(state, ideal, spread) {
+  if (!Number.isFinite(state) || !Number.isFinite(ideal) || !Number.isFinite(spread) || spread <= 0) {
+    return 0.6;
+  }
+  const diff = Math.abs(state - ideal);
+  if (diff >= spread) return 0.3;
+  return clamp(1 - (diff / spread) ** 1.4, 0.3, 1);
 }
 
-function coastalFitScore(beach, sample) {
+// Coastal/bathymetry fit (0..100) for the CONTEXT layer only. Swell direction
+// and shelter-driven size already live in the core, so this carries just the new
+// information: does the beach's nearshore shape suit the swell's energy? Open,
+// steep beaches reward more energy; soft, sheltered bays prefer moderation.
+function coastalFitScore(beach, sizeMag) {
   const profile = spotDataProfile(beach);
-  const height = sample.swellHeight ?? sample.waveHeight;
-  const period = sample.swellPeriod ?? sample.wavePeriod;
-  const direction = sample.swellDirection ?? sample.waveDirection;
-  const angleFit = directionWindowScore(direction, beach.swellCenter, beach.swellSpread);
-  const energy = swellEnergy(height, period);
-  const depthPower = Number.isFinite(profile.depthPower) ? profile.depthPower : 0.58;
-  const shelter = Number.isFinite(profile.shelterIndex) ? profile.shelterIndex : 0.35;
-  const confidence = Number.isFinite(profile.dataConfidence) ? profile.dataConfidence : 0.5;
+  const shelter = clamp(Number.isFinite(profile.shelterIndex) ? profile.shelterIndex : 0.35, 0, 1);
+  const depthPower = clamp(Number.isFinite(profile.depthPower) ? profile.depthPower : 0.58, 0, 1);
+  const confidence = clamp(Number.isFinite(profile.dataConfidence) ? profile.dataConfidence : 0.5, 0, 1);
+  const energy = Number.isFinite(sizeMag) ? sizeMag : 0.4;
 
-  const depthFit = clamp(1 - Math.abs(energy - depthPower) * 0.95, 0.18, 1);
-  const shelterFit =
-    shelter >= 0.62
-      ? clamp(angleFit * 0.62 + energy * 0.18 + (1 - shelter) * 0.2, 0.12, 1)
-      : shelter <= 0.25
-        ? clamp(angleFit * 0.45 + depthFit * 0.32 + (1 - Math.abs(energy - 0.58)) * 0.23, 0.12, 1)
-        : clamp(angleFit * 0.48 + depthFit * 0.34 + (1 - shelter * 0.35) * 0.18, 0.12, 1);
-  const raw = angleFit * 0.42 + depthFit * 0.34 + shelterFit * 0.24;
-  const confidenceFloor = 0.44 + confidence * 0.18;
+  const openness = 1 - shelter;
+  const idealEnergy = clamp(0.3 + 0.35 * openness + 0.1 * (depthPower - 0.5), 0.2, 0.85);
+  const fit = clamp(1 - 1.15 * Math.abs(energy - idealEnergy), 0.12, 1);
 
-  return 100 * clamp(raw * confidence + confidenceFloor * (1 - confidence), 0.08, 1);
-}
-
-function swellEnergy(height, period) {
-  if (!Number.isFinite(height) || !Number.isFinite(period)) return 0.45;
-  return clamp((height * Math.max(period, 5)) / 21, 0, 1);
+  // Blend toward a neutral floor where local data is thin.
+  return 100 * clamp(fit * confidence + 0.5 * (1 - confidence), 0.12, 1);
 }
 
 function tideTrendText(level, nextLevel) {
@@ -2481,25 +2627,40 @@ function windQualityText(diff, speed) {
   return `${strength} onshore`;
 }
 
+// Single source of truth for the five score tiers. labelIndex points into the
+// localized label arrays in scoreLabel so the map legend, pins, badges, and
+// labels can never drift apart.
+const SCORE_TIERS = [
+  { min: 80, pin: "pin-excellent", swatch: "excellent", labelIndex: 0 },
+  { min: 66, pin: "pin-good", swatch: "good", labelIndex: 1 },
+  { min: 52, pin: "pin-fair", swatch: "fair", labelIndex: 2 },
+  { min: 38, pin: "pin-poor", swatch: "poor", labelIndex: 3 },
+  { min: 0, pin: "pin-bad", swatch: "bad", labelIndex: 4 },
+];
+
 function scoreLabel(score) {
   const labels =
     state.lang === "pt"
       ? ["Excelente", "Bom", "Surfável", "Fraco", "Ruim"]
       : ["Excellent", "Good", "Workable", "Marginal", "Poor"];
-  if (score >= 80) return labels[0];
-  if (score >= 66) return labels[1];
-  if (score >= 52) return labels[2];
-  if (score >= 38) return labels[3];
-  return labels[4];
+  const tier = SCORE_TIERS.find((entry) => score >= entry.min) ?? SCORE_TIERS[SCORE_TIERS.length - 1];
+  return labels[tier.labelIndex];
 }
 
 function pinClass(score) {
   if (!Number.isFinite(score)) return "pin-empty";
-  if (score >= 80) return "pin-excellent";
-  if (score >= 66) return "pin-good";
-  if (score >= 52) return "pin-fair";
-  if (score >= 38) return "pin-poor";
-  return "pin-bad";
+  return (SCORE_TIERS.find((entry) => score >= entry.min) ?? SCORE_TIERS[SCORE_TIERS.length - 1]).pin;
+}
+
+// Render the map legend from SCORE_TIERS so its colors, thresholds, and words
+// always match pinClass/scoreLabel (and localize with the language toggle).
+function renderLegend() {
+  const legend = document.querySelector(".map-legend");
+  if (!legend) return;
+  legend.innerHTML = SCORE_TIERS.map((tier) => {
+    const range = tier.min === 0 ? "&lt;38" : `${tier.min}+`;
+    return `<span><i class="legend-swatch ${tier.swatch}"></i><b>${range}</b> ${escapeHtml(scoreLabel(tier.min))}</span>`;
+  }).join("");
 }
 
 function selectedBeach() {
@@ -2530,7 +2691,9 @@ function average(values) {
 
 function valueAt(hourly, key, index) {
   const value = hourly?.[key]?.[index];
-  return value === null || value === undefined ? null : Number(value);
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function initialSelectedHour() {
@@ -2550,7 +2713,9 @@ function selectedForecastTimestampSeconds(
 ) {
   const [year, month, day] = dateKey(dayOffset).split("-").map(Number);
   if (![year, month, day, hour].every(Number.isFinite)) return null;
-  return Date.UTC(year, month - 1, day, hour + 3, 0, 0) / 1000;
+  // America/Sao_Paulo is UTC-3 year-round (Brazil dropped DST in 2019), so a
+  // local wall-clock hour maps to UTC by adding 3. Revisit if DST returns.
+  return Date.UTC(year, month - 1, day, hour + SAO_PAULO_UTC_OFFSET_HOURS, 0, 0) / 1000;
 }
 
 function dateKey(offset) {
@@ -2642,6 +2807,13 @@ function scale(value, inMin, inMax, outMin, outMax) {
   if (inMax === inMin) return outMin;
   const ratio = clamp((value - inMin) / (inMax - inMin), 0, 1);
   return outMin + (outMax - outMin) * ratio;
+}
+
+// Hermite smoothstep: 0 below edge0, 1 above edge1, eased in between.
+function smoothstep(value, edge0, edge1) {
+  if (edge0 === edge1) return value >= edge1 ? 1 : 0;
+  const x = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return x * x * (3 - 2 * x);
 }
 
 function clamp(value, min, max) {

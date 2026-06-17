@@ -23,7 +23,7 @@
   /* ---------- Text ---------- */
   --fg1: #f0f0f5;
   --fg2: #a0a8bd;
-  --fg3: #8893a6;
+  --fg3: #9aa4ba; /* lifted to meet WCAG AA (~4.5:1) at the small sizes it is used */
 
   /* ---------- Accent + chart palette ---------- */
   --accent: #2dd4bf; /* teal — the lead accent */
@@ -371,16 +371,74 @@ h1 {
   letter-spacing: -0.4px;
 }
 
-.hour-slider-top span {
-  color: var(--fg3);
-  font-size: 0.78rem;
+.now-chip {
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg2);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
   font-weight: 700;
+  letter-spacing: 0.2px;
+  padding: 4px 12px;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.now-chip:hover {
+  border-color: var(--accent);
+  color: var(--fg1);
+}
+
+.now-chip[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .hour-slider-shell input[type="range"] {
   accent-color: var(--accent);
   cursor: pointer;
+  height: 28px; /* taller hit area for touch */
   width: 100%;
+}
+
+/* Enlarge the thumb beyond the browser default toward a ~24px touch target.
+   Once the thumb appearance is custom, the track must be styled too or WebKit
+   hides it. */
+.hour-slider-shell input[type="range"]::-webkit-slider-runnable-track {
+  background: var(--secondary);
+  border-radius: var(--radius-pill);
+  height: 8px;
+}
+
+.hour-slider-shell input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--accent);
+  border: 3px solid var(--panel);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  height: 24px;
+  margin-top: -8px; /* center the 24px thumb on the 8px track */
+  width: 24px;
+}
+
+.hour-slider-shell input[type="range"]::-moz-range-track {
+  background: var(--secondary);
+  border-radius: var(--radius-pill);
+  height: 8px;
+}
+
+.hour-slider-shell input[type="range"]::-moz-range-thumb {
+  background: var(--accent);
+  border: 3px solid var(--panel);
+  border-radius: 50%;
+  height: 22px;
+  width: 22px;
 }
 
 .hour-ticks {
@@ -801,6 +859,11 @@ h1 {
   width: 10px;
 }
 
+.map-legend span b {
+  color: var(--fg1);
+  font-variant-numeric: tabular-nums;
+}
+
 .legend-swatch.excellent {
   background: var(--score-excellent);
 }
@@ -812,6 +875,9 @@ h1 {
 }
 .legend-swatch.poor {
   background: var(--score-poor);
+}
+.legend-swatch.bad {
+  background: var(--score-bad);
 }
 
 /* ---------- Fallback map (no Leaflet) ---------- */
@@ -1143,6 +1209,35 @@ h1 {
   font-family: var(--font-display);
 }
 
+/* Tint the hour's score by its tier (the pin classes otherwise paint a chip
+   background; here we want colored text so the row scans at a glance). */
+.time-score.pin-excellent,
+.time-score.pin-good,
+.time-score.pin-fair,
+.time-score.pin-poor,
+.time-score.pin-bad,
+.time-score.pin-empty {
+  background: none;
+}
+.time-score.pin-excellent {
+  color: var(--score-excellent);
+}
+.time-score.pin-good {
+  color: var(--score-good);
+}
+.time-score.pin-fair {
+  color: var(--score-fair);
+}
+.time-score.pin-poor {
+  color: var(--score-poor);
+}
+.time-score.pin-bad {
+  color: var(--score-bad);
+}
+.time-score.pin-empty {
+  color: var(--fg3);
+}
+
 .time-label {
   color: var(--fg3);
   font-family: var(--font-mono);
@@ -1362,5 +1457,45 @@ h1 {
 
   .timeline {
     grid-template-columns: repeat(13, 46px);
+  }
+
+  .bar-fill {
+    width: 22px;
+  }
+}
+
+/* ---------- Focus visibility (WCAG 2.4.7) ---------- */
+:where(button, [role="button"], a, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+/* Score chips clip their overflow, so a ring outline would be cut off — use a
+   shadow ring instead. */
+.row-score:focus-visible,
+.bet-hero:focus-visible,
+.contrast-item:focus-visible,
+.time-bar:focus-visible,
+.map-pin:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent);
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .bet-hero:hover,
+  .contrast-item:hover,
+  .beach-row:hover {
+    transform: none;
   }
 }

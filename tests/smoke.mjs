@@ -49,6 +49,15 @@ globalThis.__surfCheckTest = {
   normalizeRadarFrames,
   scoreSample,
   selectedBeach,
+  windQualityFactor,
+  surfableHeightFloor,
+  sizeMagnitude,
+  effectiveBreakingHeight,
+  directionWindowScore,
+  tideStateAt,
+  selectedForecastTimestampSeconds,
+  degToCompass,
+  scoredSampleCache,
 };`,
   context,
   { filename: "app.js" },
@@ -61,6 +70,7 @@ function seedForecasts() {
   const times = surf.HOURS.map((hour) => `${date}T${String(hour).padStart(2, "0")}:00`);
 
   surf.state.forecasts.clear();
+  surf.scoredSampleCache.clear();
   surf.state.lang = "pt";
   surf.state.selectedBeachId = "ingleses";
   surf.state.selectedDayOffset = 0;
@@ -125,8 +135,9 @@ function cleanAlignedSample(beach, { height = 1.2, period = 12 } = {}) {
     secondarySwellPeriod: period,
     windWaveHeight: 0.04,
     windWavePeriod: 4,
-    seaLevel: beach.idealTide,
-    nextSeaLevel: beach.idealTide + 0.01,
+    seaLevel: 0,
+    nextSeaLevel: 0.02,
+    tideState: beach.idealTide,
     seaTemperature: 20,
   };
 }
@@ -153,6 +164,7 @@ test("forecast selectors tolerate missing beach forecasts", () => {
   seedForecasts();
 
   surf.state.forecasts.delete("ingleses");
+  surf.scoredSampleCache.clear();
 
   const view = surf.getForecastView(0, 8);
 
@@ -300,35 +312,191 @@ test("scoring rewards clean aligned groundswell over short-period windsea", () =
   assert.ok(clean.detail.windseaFrac < windsea.detail.windseaFrac);
 });
 
-test("scoring keeps sub-0.6m Ingleses below the surfable tier", () => {
+test("scoring keeps sub-floor swell in the Poor tier", () => {
   seedForecasts();
 
   const beach = surf.BEACHES.find((item) => item.id === "ingleses");
-  const low = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 0.59, period: 16 }), 0);
+  const floor = surf.surfableHeightFloor(beach); // 0.7 m for Ingleses
+  const low = surf.scoreSample(beach, cleanAlignedSample(beach, { height: floor - 0.15, period: 16 }), 0);
 
-  assert.ok(low.score < 52);
-  assert.ok(low.detail.heightCap < 52);
-  assert.ok(low.detail.sizeReadiness < 1);
+  assert.ok(low.score < 38, `expected Poor, got ${low.score}`);
+  assert.ok(low.detail.sizeReadiness < 0.9);
   assert.ok(low.reasons.some((reason) => reason.includes("piso surf")));
 });
 
-test("scoring applies the 0.6m floor across beaches", () => {
+test("scoring keeps sub-floor swell below the surfable tier at every beach", () => {
   seedForecasts();
 
   surf.BEACHES.forEach((beach) => {
-    const low = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 0.59, period: 16 }), 0);
+    const floor = surf.surfableHeightFloor(beach);
+    const low = surf.scoreSample(beach, cleanAlignedSample(beach, { height: floor - 0.1, period: 16 }), 0);
     assert.ok(low.score < 52, `${beach.id} scored ${low.score}`);
   });
 });
 
-test("scoring allows workable calls once swell reaches the floor", () => {
+test("scoring is continuous across the surfable floor (no cliff)", () => {
   seedForecasts();
 
-  const beach = surf.BEACHES.find((item) => item.id === "ingleses");
-  const atFloor = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 0.6, period: 14 }), 0);
+  surf.BEACHES.forEach((beach) => {
+    const floor = surf.surfableHeightFloor(beach);
+    const below = surf.scoreSample(beach, cleanAlignedSample(beach, { height: floor - 0.01, period: 14 }), 0);
+    const above = surf.scoreSample(beach, cleanAlignedSample(beach, { height: floor + 0.01, period: 14 }), 0);
+    assert.ok(
+      Math.abs(above.score - below.score) <= 5,
+      `${beach.id} jumped ${below.score} -> ${above.score} across the floor`,
+    );
+  });
+});
 
-  assert.ok(atFloor.score >= 52);
-  assert.equal(atFloor.detail.heightCap, 100);
+test("scoring lets a solid clean groundswell reach the Good tier", () => {
+  seedForecasts();
+
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const solid = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 1.7, period: 14 }), 0);
+
+  assert.ok(solid.score >= 66, `expected Good+, got ${solid.score}`);
+});
+
+test("scoring tracks size with diminishing returns and no top-end saturation", () => {
+  seedForecasts();
+
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const score = (height) => surf.scoreSample(beach, cleanAlignedSample(beach, { height, period: 14 }), 0).score;
+  const small = score(1.0);
+  const mid = score(1.6);
+  const big = score(2.8);
+
+  assert.ok(mid > small + 5, `1.6m (${mid}) should clearly beat 1.0m (${small})`);
+  assert.ok(big > mid + 5, `2.8m (${big}) should still beat 1.6m (${mid}) — no early saturation`);
+});
+
+test("scoring rewards long-period overhead swell and punishes a short-period closeout", () => {
+  seedForecasts();
+
+  const beach = surf.BEACHES.find((item) => item.id === "mocambique");
+  const groundswell = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 3.2, period: 16 }), 0);
+  const closeout = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 3.2, period: 8 }), 0);
+
+  assert.ok(groundswell.score >= 75, `clean overhead groundswell should be Excellent-ish, got ${groundswell.score}`);
+  assert.ok(groundswell.score > closeout.score + 30, `closeout (${closeout.score}) should be far below groundswell (${groundswell.score})`);
+});
+
+test("scoring tiny long-period swell still reads Poor", () => {
+  seedForecasts();
+
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const tiny = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 0.5, period: 16 }), 0);
+  assert.ok(tiny.score < 38, `0.5m@16s should be Poor, got ${tiny.score}`);
+});
+
+test("wind factor is monotonic and front-loads light offshore over glassy", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const wf = (speed) =>
+    surf.windQualityFactor(
+      beach,
+      { windSpeed: speed, windDirection: beach.offshoreWind, windGusts: speed },
+      0.6,
+    );
+
+  const glassy = wf(0.5);
+  const light = wf(9);
+  assert.ok(light >= glassy, `light offshore (${light}) should be >= glassy (${glassy})`);
+
+  // Non-decreasing across the grooming range; no glassy/4 km/h cliff.
+  for (let speed = 1; speed <= 12; speed += 1) {
+    assert.ok(
+      wf(speed) >= wf(speed - 1) - 1e-9,
+      `offshore wind factor dipped at ${speed} km/h`,
+    );
+  }
+});
+
+test("strong wind tapers smoothly instead of cliffing", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const wf = (speed) =>
+    surf.windQualityFactor(
+      beach,
+      { windSpeed: speed, windDirection: beach.offshoreWind, windGusts: speed },
+      0.6,
+    );
+
+  for (let speed = 35; speed <= 55; speed += 5) {
+    assert.ok(wf(speed) <= wf(speed - 5) + 1e-9, `wind factor rose into strong wind at ${speed}`);
+    assert.ok(wf(speed - 5) - wf(speed) <= 0.25, `wind factor cliffed near ${speed} km/h`);
+  }
+});
+
+test("a perfect swell collapses under strong onshore wind", () => {
+  seedForecasts();
+
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const base = cleanAlignedSample(beach, { height: 1.8, period: 14 });
+  const clean = surf.scoreSample(beach, base, 0);
+  const blown = surf.scoreSample(
+    beach,
+    { ...base, windSpeed: 32, windGusts: 38, windDirection: (beach.offshoreWind + 180) % 360 },
+    0,
+  );
+
+  assert.ok(clean.score >= 70);
+  assert.ok(blown.score < 45, `blown-out perfect swell should be Poor/Marginal, got ${blown.score}`);
+});
+
+test("the same swell differentiates beaches by exposure and angle", () => {
+  seedForecasts();
+
+  // A SE/S groundswell that the south/east beaches face and the north bays miss.
+  const swell = { height: 1.8, period: 14 };
+  const scoreFor = (id) => {
+    const beach = surf.BEACHES.find((item) => item.id === id);
+    const sample = cleanAlignedSample(beach, swell);
+    return surf.scoreSample(
+      beach,
+      { ...sample, swellDirection: 160, waveDirection: 160, windSpeed: 4, windDirection: beach.offshoreWind },
+      0,
+    ).score;
+  };
+
+  const joaquina = scoreFor("joaquina"); // faces SE — should light up
+  const ingleses = scoreFor("ingleses"); // north bay — shadowed from a S swell
+  assert.ok(joaquina - ingleses >= 15, `S swell spread too small: Joaquina ${joaquina} vs Ingleses ${ingleses}`);
+});
+
+test("direction window uses the full configured spread before flooring", () => {
+  const center = 100;
+  const spread = 70;
+  assert.ok(surf.directionWindowScore(center, center, spread) > 0.95);
+  assert.ok(surf.directionWindowScore(center + spread * 0.5, center, spread) > 0.4);
+  assert.ok(surf.directionWindowScore(center + spread * 0.9, center, spread) > 0.06);
+  assert.ok(surf.directionWindowScore(center + spread + 5, center, spread) <= 0.06 + 1e-9);
+});
+
+test("tide state normalizes against the local range, not the MSL datum", () => {
+  const marine = {
+    // A surge-shifted series: all positive metres, but a clear low->high cycle.
+    sea_level_height_msl: [0.8, 0.6, 0.4, 0.45, 0.6, 0.85, 1.1, 1.25, 1.2, 1.0],
+  };
+  assert.equal(surf.tideStateAt(marine, 2), 0); // local low
+  assert.equal(surf.tideStateAt(marine, 7), 1); // local high
+  assert.ok(Math.abs(surf.tideStateAt(marine, 4) - 0.235) < 0.05);
+  assert.equal(surf.tideStateAt({ sea_level_height_msl: [0.5, 0.5, 0.5] }, 1), 0.5); // flat
+});
+
+test("compass labels localize between English and Portuguese", () => {
+  surf.state.lang = "en";
+  assert.equal(surf.degToCompass(70), "ENE");
+  surf.state.lang = "pt";
+  assert.equal(surf.degToCompass(70), "LNE");
+  surf.state.lang = "pt";
+});
+
+test("forecast timestamp advances exactly one hour per forecast hour", () => {
+  const a = surf.selectedForecastTimestampSeconds(0, 9);
+  const b = surf.selectedForecastTimestampSeconds(0, 10);
+  assert.ok(Number.isFinite(a) && Number.isFinite(b));
+  assert.equal(b - a, 3600);
+  // A day step advances 24 hours.
+  assert.equal(surf.selectedForecastTimestampSeconds(1, 9) - a, 86400);
 });
 
 test("scoring penalizes onshore wind for the same swell", () => {
