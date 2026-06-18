@@ -1040,16 +1040,26 @@ async function fetchJson(url) {
     try {
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const error = new Error(`HTTP ${response.status}`);
+        error.retryable = isRetryableHttpStatus(response.status);
+        throw error;
       }
       return response.json();
     } catch (error) {
       lastError = error;
-      if (attempt < 2) await delay(300 + attempt * 500); // no dead backoff after the last try
+      if (attempt < 2 && error.retryable !== false) {
+        await delay(300 + attempt * 500); // no dead backoff after the last try
+      } else {
+        break;
+      }
     }
   }
 
   throw lastError ?? new Error("Forecast request failed");
+}
+
+function isRetryableHttpStatus(status) {
+  return status === 408 || status === 429 || status >= 500;
 }
 
 function delay(milliseconds) {
