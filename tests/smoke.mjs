@@ -607,6 +607,38 @@ test("fetchJson retries transient failures before returning data", async () => {
   }
 });
 
+test("fetchJson does not retry permanent HTTP failures", async () => {
+  let attempts = 0;
+  let delays = 0;
+  const originalFetch = context.fetch;
+  const originalSetTimeout = context.window.setTimeout;
+
+  context.fetch = async () => {
+    attempts += 1;
+    return {
+      ok: false,
+      status: 400,
+    };
+  };
+  context.window.setTimeout = (callback) => {
+    delays += 1;
+    callback();
+    return 0;
+  };
+
+  try {
+    await assert.rejects(
+      surf.fetchJson(new URL("https://example.test/forecast")),
+      /HTTP 400/,
+    );
+    assert.equal(attempts, 1);
+    assert.equal(delays, 0);
+  } finally {
+    context.fetch = originalFetch;
+    context.window.setTimeout = originalSetTimeout;
+  }
+});
+
 test("beach forecasts reject successful responses without hourly time arrays", async () => {
   const originalFetch = context.fetch;
 
