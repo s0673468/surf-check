@@ -26,10 +26,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.82,
     shelterIndex: 0.18,
     dataConfidence: 0.62,
-    localFeature: "Rocky bookends and short sandbar zones make small changes show quickly.",
-    forecastImpact:
-      "Depth slope and wave partitions would help separate powerful clean swell from raw, closeout-prone energy.",
-    dataNeeds: ["bathymetry", "wavePartitions", "coastline", "sandbars"],
   },
   joaquina: {
     beachAxis: "Open E-to-S beach",
@@ -38,10 +34,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.74,
     shelterIndex: 0.2,
     dataConfidence: 0.6,
-    localFeature: "Dune-backed beachbreak with bank quality doing a lot of the final work.",
-    forecastImpact:
-      "Sandbar state and swell partitions would explain why the same open-coast forecast can be excellent one week and ordinary the next.",
-    dataNeeds: ["sandbars", "wavePartitions", "bathymetry", "observations"],
   },
   campeche: {
     beachAxis: "Long south-facing shoreline",
@@ -50,10 +42,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.58,
     shelterIndex: 0.34,
     dataConfidence: 0.56,
-    localFeature: "A long beach plus island-side exposure means different peaks can disagree on the same morning.",
-    forecastImpact:
-      "Coastline geometry and sandbar snapshots would help score sections instead of treating the full beach as one point.",
-    dataNeeds: ["coastline", "sandbars", "bathymetry", "wavePartitions"],
   },
   "barra-da-lagoa": {
     beachAxis: "Filtered ENE/E cove",
@@ -62,10 +50,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.44,
     shelterIndex: 0.68,
     dataConfidence: 0.58,
-    localFeature: "The lagoon channel and tucked coastline filter energy that nearby open beaches receive directly.",
-    forecastImpact:
-      "Coastline shelter and tide data would improve the fallback call when open beaches are too big or messy.",
-    dataNeeds: ["coastline", "tides", "observations", "bathymetry"],
   },
   mocambique: {
     beachAxis: "Very open ENE/E coast",
@@ -74,10 +58,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.62,
     shelterIndex: 0.16,
     dataConfidence: 0.55,
-    localFeature: "Long undeveloped beach with many peaks, so exposure is high but consistency varies.",
-    forecastImpact:
-      "Bathymetry, coastline angle, and wave partitions would help avoid overrating raw wind-sea.",
-    dataNeeds: ["bathymetry", "coastline", "wavePartitions", "sandbars"],
   },
   santinho: {
     beachAxis: "ENE/E pocket",
@@ -86,10 +66,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.66,
     shelterIndex: 0.42,
     dataConfidence: 0.58,
-    localFeature: "Morro das Aranhas changes the wind and swell feel compared with nearby north beaches.",
-    forecastImpact:
-      "Coastline shadowing and depth shape would improve angle-sensitive days.",
-    dataNeeds: ["coastline", "bathymetry", "wavePartitions", "sandbars"],
   },
   brava: {
     beachAxis: "NE/E cliff-framed",
@@ -98,10 +74,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.78,
     shelterIndex: 0.22,
     dataConfidence: 0.57,
-    localFeature: "Cliffs frame the beach and can make a modest east swell feel stronger than expected.",
-    forecastImpact:
-      "Depth slope and observation bias checks would keep the model honest on powerful small-to-medium days.",
-    dataNeeds: ["bathymetry", "coastline", "wavePartitions", "observations"],
   },
   ingleses: {
     beachAxis: "Broad north bay",
@@ -110,10 +82,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.46,
     shelterIndex: 0.56,
     dataConfidence: 0.55,
-    localFeature: "The broad bay shape can soften or miss energy that reaches Brava or Santinho.",
-    forecastImpact:
-      "Coastline shelter and tide calibration would improve when Ingleses should be scored as a mellow alternative.",
-    dataNeeds: ["coastline", "tides", "bathymetry", "observations"],
   },
   matadeiro: {
     beachAxis: "SE/SSE cove",
@@ -122,10 +90,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.58,
     shelterIndex: 0.48,
     dataConfidence: 0.54,
-    localFeature: "The river and cove shape can open the beach to more energy than Armacao next door.",
-    forecastImpact:
-      "Tide, coastline, and sandbar data would help explain why one side of the cove turns on first.",
-    dataNeeds: ["tides", "coastline", "sandbars", "bathymetry"],
   },
   armacao: {
     beachAxis: "Protected south pocket",
@@ -134,10 +98,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.4,
     shelterIndex: 0.72,
     dataConfidence: 0.52,
-    localFeature: "Protection can make it user-friendly, but it also means some swell angles never really arrive.",
-    forecastImpact:
-      "Shelter geometry and local tide data would reduce false positives on underpowered mornings.",
-    dataNeeds: ["coastline", "tides", "observations", "bathymetry"],
   },
   "lagoinha-do-leste": {
     beachAxis: "Very open SE/ESE cove",
@@ -146,10 +106,6 @@ const SPOT_DATA_PROFILES = {
     depthPower: 0.72,
     shelterIndex: 0.2,
     dataConfidence: 0.48,
-    localFeature: "Remote open exposure raises upside and downside: standout when aligned, raw when not.",
-    forecastImpact:
-      "Bathymetry and wave partitions would help separate high-upside lined-up swell from exposed storm surf.",
-    dataNeeds: ["bathymetry", "wavePartitions", "coastline", "sandbars"],
   },
 };
 
@@ -2733,9 +2689,6 @@ function spotDataProfile(beach) {
       depthPower: 0.58,
       shelterIndex: 0.35,
       dataConfidence: 0.45,
-      localFeature: beach.whyNearby,
-      forecastImpact: "Coastline and bathymetry data would improve this spot's local calibration.",
-      dataNeeds: ["coastline", "bathymetry", "wavePartitions"],
     }
   );
 }
