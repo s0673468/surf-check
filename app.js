@@ -1260,8 +1260,8 @@ function renderMetrics(scored) {
     {
       icon: "waves",
       label: t("swell"),
-      value: `${formatNumber(sample.swellHeight ?? sample.waveHeight, 1)} m · ${formatNumber(sample.swellPeriod ?? sample.wavePeriod, 1)} s`,
-      sub: `${degToCompass(sample.swellDirection ?? sample.waveDirection)} ${formatDegrees(sample.swellDirection ?? sample.waveDirection)}`,
+      value: `${formatNumber(effHeight(sample), 1)} m · ${formatNumber(effPeriod(sample), 1)} s`,
+      sub: `${degToCompass(effDir(sample))} ${formatDegrees(effDir(sample))}`,
       detail: swellRead.detail,
       tone: partTone(score.parts.swell),
     },
@@ -1347,7 +1347,7 @@ function renderTopBet({ beach, scored }) {
         <span class="bet-hero-name">${escapeHtml(beach.name)}</span>
         <span class="bet-hero-read">${escapeHtml(compactSessionRead(scored))}</span>
         <span class="bet-hero-stats">
-          <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">waves</span><span class="mono">${formatNumber(sample.swellHeight ?? sample.waveHeight, 1)} m @ ${formatNumber(sample.swellPeriod ?? sample.wavePeriod, 1)} s ${degToCompass(sample.swellDirection ?? sample.waveDirection)}</span></span>
+          <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">waves</span><span class="mono">${formatNumber(effHeight(sample), 1)} m @ ${formatNumber(effPeriod(sample), 1)} s ${degToCompass(effDir(sample))}</span></span>
           <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">air</span><span class="mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)} km/h</span></span>
         </span>
       </span>
@@ -1363,7 +1363,7 @@ function renderBeachRow({ beach, scored }) {
       <span class="row-score ${pinClass(score)}">${score}</span>
       <span class="row-copy">
         <span class="row-name">${escapeHtml(beach.name)}</span>
-        <span class="row-data mono">${formatNumber(sample.swellHeight ?? sample.waveHeight, 1)} m @ ${formatNumber(sample.swellPeriod ?? sample.wavePeriod, 1)} s ${degToCompass(sample.swellDirection ?? sample.waveDirection)}</span>
+        <span class="row-data mono">${formatNumber(effHeight(sample), 1)} m @ ${formatNumber(effPeriod(sample), 1)} s ${degToCompass(effDir(sample))}</span>
       </span>
       <span class="row-wind mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)}<small> km/h</small></span>
     </button>
@@ -1523,7 +1523,7 @@ function describeDay(dayOffset) {
   // --- Conditions: representative size + cleanliness at the day's best hour ---
   const peakHourEntries = scan.filter((e) => e.hour === best.hour);
   const repHeight = average(
-    peakHourEntries.map((e) => e.scored.sample.swellHeight ?? e.scored.sample.waveHeight),
+    peakHourEntries.map((e) => effHeight(e.scored.sample)),
   );
   const windQuality = average(peakHourEntries.map((e) => e.scored.score.parts.wind));
 
@@ -1711,9 +1711,9 @@ const SWELL_PROSE = {
 };
 
 function describeSwell(beach, sample) {
-  const height = sample.swellHeight ?? sample.waveHeight;
-  const period = sample.swellPeriod ?? sample.wavePeriod;
-  const direction = sample.swellDirection ?? sample.waveDirection;
+  const height = effHeight(sample);
+  const period = effPeriod(sample);
+  const direction = effDir(sample);
   const directionDiff = angularDiff(direction, beach.swellCenter);
   const f = SWELL_PROSE[state.lang] ?? SWELL_PROSE.pt;
 
@@ -1813,10 +1813,10 @@ function describeWind(beach, sample) {
 
 function describeCoastalFit(beach, sample, coastalScore) {
   const profile = spotDataProfile(beach);
-  const direction = sample.swellDirection ?? sample.waveDirection;
+  const direction = effDir(sample);
   const angleFit = directionWindowScore(direction, beach.swellCenter, beach.swellSpread);
   const energy = sizeMagnitude(
-    effectiveBreakingHeight(beach, sample.swellHeight ?? sample.waveHeight, sample.swellPeriod ?? sample.wavePeriod),
+    effectiveBreakingHeight(beach, effHeight(sample), effPeriod(sample)),
   );
   const pt = state.lang === "pt";
 
@@ -2029,8 +2029,8 @@ function contrastReason(selectedScored, otherScored) {
 }
 
 function swellContrastReason(selectedScored, otherScored) {
-  const selectedDirection = selectedScored.sample.swellDirection ?? selectedScored.sample.waveDirection;
-  const otherDirection = otherScored.sample.swellDirection ?? otherScored.sample.waveDirection;
+  const selectedDirection = effDir(selectedScored.sample);
+  const otherDirection = effDir(otherScored.sample);
   const selectedDiff = angularDiff(selectedDirection, selectedScored.beach.swellCenter);
   const otherDiff = angularDiff(otherDirection, otherScored.beach.swellCenter);
   const pt = state.lang === "pt";
@@ -2045,8 +2045,8 @@ function swellContrastReason(selectedScored, otherScored) {
       : `Swell angle fits ${better.beach.name} better: about ${min}° off its target versus ${max}° at ${worse.beach.name}.`;
   }
 
-  const selectedHeight = selectedScored.sample.swellHeight ?? selectedScored.sample.waveHeight;
-  const otherHeight = otherScored.sample.swellHeight ?? otherScored.sample.waveHeight;
+  const selectedHeight = effHeight(selectedScored.sample);
+  const otherHeight = effHeight(otherScored.sample);
   if (Number.isFinite(selectedHeight) && Number.isFinite(otherHeight) && Math.abs(selectedHeight - otherHeight) >= 0.15) {
     const bigger = selectedHeight > otherHeight ? selectedScored : otherScored;
     return pt
@@ -2290,6 +2290,21 @@ function shelterAttenuation(beach) {
   return 1 - SHELTER_ENERGY_LOSS * shelter;
 }
 
+// Primary-swell value with a wind-wave fallback. The marine feed sometimes omits
+// the partitioned swell columns, so the prose/score layers read the combined
+// wave figures when the swell partition is missing.
+function effHeight(sample) {
+  return sample.swellHeight ?? sample.waveHeight;
+}
+
+function effPeriod(sample) {
+  return sample.swellPeriod ?? sample.wavePeriod;
+}
+
+function effDir(sample) {
+  return sample.swellDirection ?? sample.waveDirection;
+}
+
 // Effective breaking height at the beach (after shelter loss). One size scale,
 // reused by the score, the size-aware wind shield, and the prose layer.
 function effectiveBreakingHeight(beach, height, period) {
@@ -2382,9 +2397,9 @@ function windQualityFactor(beach, sample, sizeMag = 0.5) {
 }
 
 function scoreSample(beach, sample, dayOffset) {
-  const swellHeight = sample.swellHeight ?? sample.waveHeight ?? 0;
-  const swellPeriod = sample.swellPeriod ?? sample.wavePeriod ?? 0;
-  const swellDirection = sample.swellDirection ?? sample.waveDirection;
+  const swellHeight = effHeight(sample) ?? 0;
+  const swellPeriod = effPeriod(sample) ?? 0;
+  const swellDirection = effDir(sample);
   const rain = sample.precipitationProbability ?? 0;
   const cloud = sample.cloudCover ?? 0;
 
