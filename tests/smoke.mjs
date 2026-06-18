@@ -255,7 +255,14 @@ test("rain radar tile urls use RainViewer frame paths", () => {
     }),
     "https://tilecache.rainviewer.com/v2/radar/sample/256/{z}/{x}/{y}/2/1_1.png",
   );
+  assert.equal(
+    surf.buildRadarTileUrl(" https://tilecache.rainviewer.com/ ", {
+      path: "v2/radar/sample",
+    }),
+    "https://tilecache.rainviewer.com/v2/radar/sample/256/{z}/{x}/{y}/2/1_1.png",
+  );
   assert.equal(surf.buildRadarTileUrl("", { path: "/v2/radar/sample" }), "");
+  assert.equal(surf.buildRadarTileUrl("https://tilecache.rainviewer.com", { path: " " }), "");
 });
 
 test("rain radar frame matching follows selected forecast time", () => {
