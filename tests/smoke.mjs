@@ -250,16 +250,17 @@ test("day overview describes seeded forecast in both languages", () => {
 
 test("rain radar metadata normalizes past and nowcast frames", () => {
   const normalized = surf.normalizeRadarFrames({
-    host: "https://tilecache.rainviewer.com",
+    host: " https://tilecache.rainviewer.com/ ",
     radar: {
       past: [
         { time: 30, path: "/v2/radar/past-late" },
         { time: 10, path: "/v2/radar/past-early" },
       ],
       nowcast: [
-        { time: 40, path: "/v2/radar/future" },
+        { time: " 40 ", path: "v2/radar/future" },
         { time: "bad", path: "/v2/radar/bad" },
         { time: 20 },
+        { time: 50, path: " " },
       ],
     },
   });

@@ -859,14 +859,18 @@ async function loadRadarFrames() {
 }
 
 function normalizeRadarFrames(metadata) {
-  const host = typeof metadata?.host === "string" ? metadata.host : "";
+  const host =
+    typeof metadata?.host === "string" ? metadata.host.trim().replace(/\/+$/, "") : "";
   const past = Array.isArray(metadata?.radar?.past) ? metadata.radar.past : [];
   const nowcast = Array.isArray(metadata?.radar?.nowcast) ? metadata.radar.nowcast : [];
   const frames = [...past, ...nowcast]
-    .map((frame) => ({
-      time: Number(frame?.time),
-      path: typeof frame?.path === "string" ? frame.path : "",
-    }))
+    .map((frame) => {
+      const rawPath = typeof frame?.path === "string" ? frame.path.trim() : "";
+      return {
+        time: numericCell(frame?.time),
+        path: rawPath ? `/${rawPath.replace(/^\/+/, "")}` : "",
+      };
+    })
     .filter((frame) => Number.isFinite(frame.time) && frame.path)
     .sort((a, b) => a.time - b.time);
 
