@@ -268,6 +268,10 @@ test("rain radar metadata normalizes past and nowcast frames", () => {
 
   assert.equal(normalized.host, "https://tilecache.rainviewer.com");
   assert.deepEqual(
+    Array.from(normalized.frames, (frame) => frame.time),
+    [10, 30, 40],
+  );
+  assert.deepEqual(
     Array.from(normalized.frames, (frame) => frame.path),
     ["/v2/radar/past-early", "/v2/radar/past-late", "/v2/radar/future"],
   );
