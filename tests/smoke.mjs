@@ -607,6 +607,45 @@ test("fetchJson retries transient failures before returning data", async () => {
   }
 });
 
+test("fetchJson retries retryable HTTP failures before returning data", async () => {
+  let attempts = 0;
+  let delays = 0;
+  const originalFetch = context.fetch;
+  const originalSetTimeout = context.window.setTimeout;
+
+  context.fetch = async () => {
+    attempts += 1;
+    if (attempts < 2) {
+      return {
+        ok: false,
+        status: 500,
+      };
+    }
+    return {
+      ok: true,
+      async json() {
+        return { attempts };
+      },
+    };
+  };
+  context.window.setTimeout = (callback) => {
+    delays += 1;
+    callback();
+    return 0;
+  };
+
+  try {
+    assert.deepEqual(await surf.fetchJson(new URL("https://example.test/forecast")), {
+      attempts: 2,
+    });
+    assert.equal(attempts, 2);
+    assert.equal(delays, 1);
+  } finally {
+    context.fetch = originalFetch;
+    context.window.setTimeout = originalSetTimeout;
+  }
+});
+
 test("fetchJson does not retry permanent HTTP failures", async () => {
   let attempts = 0;
   let delays = 0;
