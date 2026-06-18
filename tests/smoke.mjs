@@ -511,6 +511,8 @@ test("tide state normalizes against the local range, not the MSL datum", () => {
   assert.equal(surf.tideStateAt(marine, 7), 1); // local high
   assert.ok(Math.abs(surf.tideStateAt(marine, 4) - 0.235) < 0.05);
   assert.equal(surf.tideStateAt({ sea_level_height_msl: [0.5, 0.5, 0.5] }, 1), 0.5); // flat
+  assert.equal(surf.tideStateAt({ sea_level_height_msl: [" ", "0.4", "0.8"] }, 1), 0);
+  assert.equal(surf.tideStateAt({ sea_level_height_msl: [" ", "0.4", "0.8"] }, 0), 0.5);
 });
 
 test("compass labels localize between English and Portuguese", () => {
