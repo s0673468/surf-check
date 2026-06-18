@@ -2267,7 +2267,6 @@ function tideStateAt(marine, index) {
 // size term reaches 0.5. Lower it for a friendlier scale, raise it for stricter.
 // ---------------------------------------------------------------------------
 const SIZE_REF = 0.9;
-const ENERGY_REF = 14; // H^2*T of a fun chest-high day; used only by the prose layer
 const DEFAULT_MIN_SURF_HEIGHT = 0.6;
 const DEFAULT_FULL_SURF_HEIGHT = 0.95;
 const SHELTER_ENERGY_LOSS = 0.4; // a fully sheltered bay sheds ~40% of the open-coast breaking height
