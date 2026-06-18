@@ -7,6 +7,31 @@ const RADAR_METADATA_URL = "https://api.rainviewer.com/public/weather-maps.json"
 const RADAR_FRAME_TOLERANCE_MINUTES = 65;
 const RADAR_NATIVE_MAX_ZOOM = 7;
 const RADAR_OPACITY = 0.42;
+const WEATHER_HOURLY_FIELDS = [
+  "temperature_2m",
+  "apparent_temperature",
+  "precipitation_probability",
+  "cloud_cover",
+  "wind_speed_10m",
+  "wind_direction_10m",
+  "wind_gusts_10m",
+];
+const MARINE_HOURLY_FIELDS = [
+  "wave_height",
+  "wave_direction",
+  "wave_period",
+  "swell_wave_height",
+  "swell_wave_direction",
+  "swell_wave_period",
+  "secondary_swell_wave_height",
+  "secondary_swell_wave_direction",
+  "secondary_swell_wave_period",
+  "wind_wave_height",
+  "wind_wave_direction",
+  "wind_wave_period",
+  "sea_level_height_msl",
+  "sea_surface_temperature",
+];
 // Relative influence of each dimension. The final score combines them
 // multiplicatively (see scoreSample); these weights drive the explanatory layer
 // (which factor most explains a difference, and the limiting/support factor).
@@ -956,8 +981,7 @@ async function fetchBeachForecast(beach) {
   weatherUrl.search = new URLSearchParams({
     latitude: beach.lat,
     longitude: beach.lon,
-    hourly:
-      "temperature_2m,apparent_temperature,precipitation_probability,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+    hourly: WEATHER_HOURLY_FIELDS.join(","),
     timezone: TZ,
     forecast_days: "4",
     wind_speed_unit: "kmh",
@@ -967,8 +991,7 @@ async function fetchBeachForecast(beach) {
   marineUrl.search = new URLSearchParams({
     latitude: beach.lat,
     longitude: beach.lon,
-    hourly:
-      "wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,secondary_swell_wave_height,secondary_swell_wave_direction,secondary_swell_wave_period,wind_wave_height,wind_wave_direction,wind_wave_period,sea_level_height_msl,sea_surface_temperature",
+    hourly: MARINE_HOURLY_FIELDS.join(","),
     timezone: TZ,
     forecast_days: "4",
     cell_selection: "sea",
@@ -978,8 +1001,8 @@ async function fetchBeachForecast(beach) {
     fetchJson(weatherUrl),
     fetchJson(marineUrl),
   ]);
-  const weatherHourly = requireHourlyPayload(weather, "Weather", beach);
-  const marineHourly = requireHourlyPayload(marine, "Marine", beach);
+  const weatherHourly = requireHourlyPayload(weather, "Weather", beach, WEATHER_HOURLY_FIELDS);
+  const marineHourly = requireHourlyPayload(marine, "Marine", beach, MARINE_HOURLY_FIELDS);
 
   return {
     beachId: beach.id,
@@ -988,12 +1011,19 @@ async function fetchBeachForecast(beach) {
   };
 }
 
-function requireHourlyPayload(payload, sourceName, beach) {
+function requireHourlyPayload(payload, sourceName, beach, expectedFields = []) {
   const hourly = payload?.hourly;
   if (!hourly || !Array.isArray(hourly.time) || hourly.time.length === 0) {
     throw new Error(`${sourceName} forecast missing hourly time series for ${beach.name}`);
   }
-  return hourly;
+
+  const normalized = { ...hourly };
+  for (const field of expectedFields) {
+    if (!Array.isArray(normalized[field])) {
+      normalized[field] = Array.from({ length: hourly.time.length }, () => null);
+    }
+  }
+  return normalized;
 }
 
 async function fetchJson(url) {
