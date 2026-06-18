@@ -143,6 +143,21 @@ function cleanAlignedSample(beach, { height = 1.2, period = 12 } = {}) {
   };
 }
 
+async function withMockedBrowserIO({ fetch, setTimeout }, run) {
+  const originalFetch = context.fetch;
+  const originalSetTimeout = context.window.setTimeout;
+
+  if (fetch) context.fetch = fetch;
+  if (setTimeout) context.window.setTimeout = setTimeout;
+
+  try {
+    await run();
+  } finally {
+    context.fetch = originalFetch;
+    context.window.setTimeout = originalSetTimeout;
+  }
+}
+
 test("forecast selectors build a reusable selected-hour view", () => {
   seedForecasts();
 
@@ -581,153 +596,146 @@ test("scoring penalizes onshore wind for the same swell", () => {
 
 test("fetchJson retries transient failures before returning data", async () => {
   let attempts = 0;
-  const originalFetch = context.fetch;
-  const originalSetTimeout = context.window.setTimeout;
 
-  context.fetch = async () => {
-    attempts += 1;
-    if (attempts < 3) {
-      throw new Error("temporary network failure");
-    }
-    return {
-      ok: true,
-      async json() {
-        return { attempts };
+  await withMockedBrowserIO(
+    {
+      fetch: async () => {
+        attempts += 1;
+        if (attempts < 3) {
+          throw new Error("temporary network failure");
+        }
+        return {
+          ok: true,
+          async json() {
+            return { attempts };
+          },
+        };
       },
-    };
-  };
-  context.window.setTimeout = (callback) => {
-    callback();
-    return 0;
-  };
-
-  try {
-    assert.deepEqual(await surf.fetchJson(new URL("https://example.test/forecast")), {
-      attempts: 3,
-    });
-    assert.equal(attempts, 3);
-  } finally {
-    context.fetch = originalFetch;
-    context.window.setTimeout = originalSetTimeout;
-  }
+      setTimeout: (callback) => {
+        callback();
+        return 0;
+      },
+    },
+    async () => {
+      assert.deepEqual(await surf.fetchJson(new URL("https://example.test/forecast")), {
+        attempts: 3,
+      });
+      assert.equal(attempts, 3);
+    },
+  );
 });
 
 test("fetchJson retries retryable HTTP failures before returning data", async () => {
   let attempts = 0;
   let delays = 0;
-  const originalFetch = context.fetch;
-  const originalSetTimeout = context.window.setTimeout;
 
-  context.fetch = async () => {
-    attempts += 1;
-    if (attempts < 2) {
-      return {
-        ok: false,
-        status: 500,
-      };
-    }
-    return {
-      ok: true,
-      async json() {
-        return { attempts };
+  await withMockedBrowserIO(
+    {
+      fetch: async () => {
+        attempts += 1;
+        if (attempts < 2) {
+          return {
+            ok: false,
+            status: 500,
+          };
+        }
+        return {
+          ok: true,
+          async json() {
+            return { attempts };
+          },
+        };
       },
-    };
-  };
-  context.window.setTimeout = (callback) => {
-    delays += 1;
-    callback();
-    return 0;
-  };
-
-  try {
-    assert.deepEqual(await surf.fetchJson(new URL("https://example.test/forecast")), {
-      attempts: 2,
-    });
-    assert.equal(attempts, 2);
-    assert.equal(delays, 1);
-  } finally {
-    context.fetch = originalFetch;
-    context.window.setTimeout = originalSetTimeout;
-  }
+      setTimeout: (callback) => {
+        delays += 1;
+        callback();
+        return 0;
+      },
+    },
+    async () => {
+      assert.deepEqual(await surf.fetchJson(new URL("https://example.test/forecast")), {
+        attempts: 2,
+      });
+      assert.equal(attempts, 2);
+      assert.equal(delays, 1);
+    },
+  );
 });
 
 test("fetchJson does not retry permanent HTTP failures", async () => {
   let attempts = 0;
   let delays = 0;
-  const originalFetch = context.fetch;
-  const originalSetTimeout = context.window.setTimeout;
 
-  context.fetch = async () => {
-    attempts += 1;
-    return {
-      ok: false,
-      status: 400,
-    };
-  };
-  context.window.setTimeout = (callback) => {
-    delays += 1;
-    callback();
-    return 0;
-  };
-
-  try {
-    await assert.rejects(
-      surf.fetchJson(new URL("https://example.test/forecast")),
-      /HTTP 400/,
-    );
-    assert.equal(attempts, 1);
-    assert.equal(delays, 0);
-  } finally {
-    context.fetch = originalFetch;
-    context.window.setTimeout = originalSetTimeout;
-  }
+  await withMockedBrowserIO(
+    {
+      fetch: async () => {
+        attempts += 1;
+        return {
+          ok: false,
+          status: 400,
+        };
+      },
+      setTimeout: (callback) => {
+        delays += 1;
+        callback();
+        return 0;
+      },
+    },
+    async () => {
+      await assert.rejects(
+        surf.fetchJson(new URL("https://example.test/forecast")),
+        /HTTP 400/,
+      );
+      assert.equal(attempts, 1);
+      assert.equal(delays, 0);
+    },
+  );
 });
 
 test("beach forecasts reject successful responses without hourly time arrays", async () => {
-  const originalFetch = context.fetch;
-
-  context.fetch = async (url) => ({
-    ok: true,
-    async json() {
-      if (String(url).includes("marine-api")) {
-        return { hourly: { time: ["2026-06-17T06:00"] } };
-      }
-      return { hourly: {} };
+  await withMockedBrowserIO(
+    {
+      fetch: async (url) => ({
+        ok: true,
+        async json() {
+          if (String(url).includes("marine-api")) {
+            return { hourly: { time: ["2026-06-17T06:00"] } };
+          }
+          return { hourly: {} };
+        },
+      }),
     },
-  });
-
-  try {
-    await assert.rejects(
-      surf.fetchBeachForecast(surf.BEACHES[0]),
-      /Weather forecast missing hourly time series/,
-    );
-  } finally {
-    context.fetch = originalFetch;
-  }
+    async () => {
+      await assert.rejects(
+        surf.fetchBeachForecast(surf.BEACHES[0]),
+        /Weather forecast missing hourly time series/,
+      );
+    },
+  );
 });
 
 test("beach forecasts normalize missing optional hourly fields", async () => {
-  const originalFetch = context.fetch;
   const time = ["2026-06-17T06:00", "2026-06-17T07:00"];
 
-  context.fetch = async (url) => ({
-    ok: true,
-    async json() {
-      if (String(url).includes("marine-api")) {
-        return { hourly: { time, wave_height: [1.1, 1.2] } };
-      }
-      return { hourly: { time, temperature_2m: [21, 22] } };
+  await withMockedBrowserIO(
+    {
+      fetch: async (url) => ({
+        ok: true,
+        async json() {
+          if (String(url).includes("marine-api")) {
+            return { hourly: { time, wave_height: [1.1, 1.2] } };
+          }
+          return { hourly: { time, temperature_2m: [21, 22] } };
+        },
+      }),
     },
-  });
+    async () => {
+      const forecast = await surf.fetchBeachForecast(surf.BEACHES[0]);
 
-  try {
-    const forecast = await surf.fetchBeachForecast(surf.BEACHES[0]);
-
-    assert.deepEqual(forecast.weather.temperature_2m, [21, 22]);
-    assert.deepEqual(Array.from(forecast.weather.wind_speed_10m), [null, null]);
-    assert.deepEqual(forecast.marine.wave_height, [1.1, 1.2]);
-    assert.deepEqual(Array.from(forecast.marine.sea_surface_temperature), [null, null]);
-  } finally {
-    context.fetch = originalFetch;
-  }
+      assert.deepEqual(forecast.weather.temperature_2m, [21, 22]);
+      assert.deepEqual(Array.from(forecast.weather.wind_speed_10m), [null, null]);
+      assert.deepEqual(forecast.marine.wave_height, [1.1, 1.2]);
+      assert.deepEqual(Array.from(forecast.marine.sea_surface_temperature), [null, null]);
+    },
+  );
 });
