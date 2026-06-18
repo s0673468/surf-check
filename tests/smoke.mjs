@@ -596,3 +596,29 @@ test("beach forecasts reject successful responses without hourly time arrays", a
     context.fetch = originalFetch;
   }
 });
+
+test("beach forecasts normalize missing optional hourly fields", async () => {
+  const originalFetch = context.fetch;
+  const time = ["2026-06-17T06:00", "2026-06-17T07:00"];
+
+  context.fetch = async (url) => ({
+    ok: true,
+    async json() {
+      if (String(url).includes("marine-api")) {
+        return { hourly: { time, wave_height: [1.1, 1.2] } };
+      }
+      return { hourly: { time, temperature_2m: [21, 22] } };
+    },
+  });
+
+  try {
+    const forecast = await surf.fetchBeachForecast(surf.BEACHES[0]);
+
+    assert.deepEqual(forecast.weather.temperature_2m, [21, 22]);
+    assert.deepEqual(Array.from(forecast.weather.wind_speed_10m), [null, null]);
+    assert.deepEqual(forecast.marine.wave_height, [1.1, 1.2]);
+    assert.deepEqual(Array.from(forecast.marine.sea_surface_temperature), [null, null]);
+  } finally {
+    context.fetch = originalFetch;
+  }
+});
