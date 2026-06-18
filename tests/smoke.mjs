@@ -261,6 +261,7 @@ test("rain radar metadata normalizes past and nowcast frames", () => {
         { time: "bad", path: "/v2/radar/bad" },
         { time: 20 },
         { time: 50, path: " " },
+        { time: 60, path: "///" },
       ],
     },
   });

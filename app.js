@@ -865,10 +865,11 @@ function normalizeRadarFrames(metadata) {
   const nowcast = Array.isArray(metadata?.radar?.nowcast) ? metadata.radar.nowcast : [];
   const frames = [...past, ...nowcast]
     .map((frame) => {
-      const rawPath = typeof frame?.path === "string" ? frame.path.trim() : "";
+      const rawPath =
+        typeof frame?.path === "string" ? frame.path.trim().replace(/^\/+/, "") : "";
       return {
         time: numericCell(frame?.time),
-        path: rawPath ? `/${rawPath.replace(/^\/+/, "")}` : "",
+        path: rawPath ? `/${rawPath}` : "",
       };
     })
     .filter((frame) => Number.isFinite(frame.time) && frame.path)
