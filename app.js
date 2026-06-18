@@ -2190,7 +2190,6 @@ function computeScoredSample(beach, dayOffset, hour) {
   const sample = {
     time: target,
     temperature: valueAt(forecast.weather, "temperature_2m", weatherIndex),
-    apparentTemperature: valueAt(forecast.weather, "apparent_temperature", weatherIndex),
     precipitationProbability: valueAt(
       forecast.weather,
       "precipitation_probability",
