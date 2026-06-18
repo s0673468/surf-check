@@ -2813,12 +2813,6 @@ function angularDiff(a, b) {
   return diff;
 }
 
-function scale(value, inMin, inMax, outMin, outMax) {
-  if (inMax === inMin) return outMin;
-  const ratio = clamp((value - inMin) / (inMax - inMin), 0, 1);
-  return outMin + (outMax - outMin) * ratio;
-}
-
 // Hermite smoothstep: 0 below edge0, 1 above edge1, eased in between.
 function smoothstep(value, edge0, edge1) {
   if (edge0 === edge1) return value >= edge1 ? 1 : 0;
