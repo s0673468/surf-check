@@ -1347,7 +1347,7 @@ function renderTopBet({ beach, scored }) {
         <span class="bet-hero-name">${escapeHtml(beach.name)}</span>
         <span class="bet-hero-read">${escapeHtml(compactSessionRead(scored))}</span>
         <span class="bet-hero-stats">
-          <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">waves</span><span class="mono">${formatNumber(effHeight(sample), 1)} m @ ${formatNumber(effPeriod(sample), 1)} s ${degToCompass(effDir(sample))}</span></span>
+          <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">waves</span><span class="mono">${formatSwellStat(sample)}</span></span>
           <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">air</span><span class="mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)} km/h</span></span>
         </span>
       </span>
@@ -1363,7 +1363,7 @@ function renderBeachRow({ beach, scored }) {
       <span class="row-score ${pinClass(score)}">${score}</span>
       <span class="row-copy">
         <span class="row-name">${escapeHtml(beach.name)}</span>
-        <span class="row-data mono">${formatNumber(effHeight(sample), 1)} m @ ${formatNumber(effPeriod(sample), 1)} s ${degToCompass(effDir(sample))}</span>
+        <span class="row-data mono">${formatSwellStat(sample)}</span>
       </span>
       <span class="row-wind mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)}<small> km/h</small></span>
     </button>
@@ -2303,6 +2303,12 @@ function effPeriod(sample) {
 
 function effDir(sample) {
   return sample.swellDirection ?? sample.waveDirection;
+}
+
+// Compact "H m @ T s DIR" swell stat line shared by the top-bet hero and the
+// beach-row list.
+function formatSwellStat(sample) {
+  return `${formatNumber(effHeight(sample), 1)} m @ ${formatNumber(effPeriod(sample), 1)} s ${degToCompass(effDir(sample))}`;
 }
 
 // Effective breaking height at the beach (after shelter loss). One size scale,
