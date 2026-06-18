@@ -2250,7 +2250,7 @@ function computeScoredSample(beach, dayOffset, hour) {
 function tideStateAt(marine, index) {
   const levels = marine?.sea_level_height_msl;
   if (!Array.isArray(levels)) return 0.5;
-  const here = Number(levels[index]);
+  const here = numericCell(levels[index]);
   if (!Number.isFinite(here)) return 0.5;
 
   const lo = Math.max(0, index - 18);
@@ -2258,7 +2258,7 @@ function tideStateAt(marine, index) {
   let min = Infinity;
   let max = -Infinity;
   for (let i = lo; i <= hi; i += 1) {
-    const value = Number(levels[i]);
+    const value = numericCell(levels[i]);
     if (!Number.isFinite(value)) continue;
     if (value < min) min = value;
     if (value > max) max = value;
@@ -2733,7 +2733,10 @@ function average(values) {
 }
 
 function valueAt(hourly, key, index) {
-  const value = hourly?.[key]?.[index];
+  return numericCell(hourly?.[key]?.[index]);
+}
+
+function numericCell(value) {
   const normalized = typeof value === "string" ? value.trim() : value;
   if (normalized === null || normalized === undefined || normalized === "") return null;
   const numeric = Number(normalized);
