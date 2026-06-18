@@ -1183,6 +1183,12 @@ function compareScoredEntries(a, b) {
   return b.scored.score.score - a.scored.score.score;
 }
 
+// Descending comparator for flat `{ score }` entries (the prose layer's per-beach
+// and per-hour peak summaries).
+function compareByScoreDesc(a, b) {
+  return b.score - a.score;
+}
+
 function renderTemperatureStrip(view = getForecastView()) {
   const samples = view.scoredBeaches.map((entry) => entry.scored);
   const air = average(samples.map((item) => item.sample.temperature));
@@ -1518,7 +1524,7 @@ function describeDay(dayOffset) {
     return beachEntries.length ? { beach, score: bestScoredEntry(beachEntries).scored.score.score } : null;
   })
     .filter(Boolean)
-    .sort((a, b) => b.score - a.score);
+    .sort(compareByScoreDesc);
 
   // --- Conditions: representative size + cleanliness at the day's best hour ---
   const peakHourEntries = scan.filter((e) => e.hour === best.hour);
