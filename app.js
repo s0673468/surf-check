@@ -428,6 +428,8 @@ const UI = {
     wind: "Vento",
     tide: "Maré",
     weather: "Tempo",
+    toneWord: (tone) =>
+      ({ good: "bom", watch: "atenção", poor: "fraco" })[tone] ?? tone,
     hourByHour: "Hora a hora",
     closestSpots: "Praias próximas",
     tapToCompare: "toque para comparar",
@@ -470,6 +472,8 @@ const UI = {
     wind: "Wind",
     tide: "Tide",
     weather: "Weather",
+    toneWord: (tone) =>
+      ({ good: "good", watch: "watch", poor: "poor" })[tone] ?? tone,
     hourByHour: "Hour by hour",
     closestSpots: "Closest spots",
     tapToCompare: "tap to compare",
@@ -724,6 +728,7 @@ function renderControls() {
         step="1"
         value="${state.selectedHour}"
         aria-label="${escapeHtml(t("hourAria"))}"
+        aria-valuetext="${String(state.selectedHour).padStart(2, "0")}:00"
       />
       <div class="hour-ticks" aria-hidden="true">
         <span>06</span>
@@ -740,6 +745,7 @@ function renderControls() {
   slider.addEventListener("input", () => {
     state.selectedHour = Number(slider.value);
     if (output) output.textContent = formatHour(state.selectedHour); // instant readout
+    slider.setAttribute("aria-valuetext", `${String(state.selectedHour).padStart(2, "0")}:00`);
     renderData(); // skip renderControls so the slider survives the drag
   });
 
@@ -1304,7 +1310,7 @@ function renderMetrics(scored) {
   elements.metricGrid.innerHTML = metrics
     .map(
       (metric) => `
-        <div class="metric metric-${escapeHtml(metric.tone)}">
+        <div class="metric metric-${escapeHtml(metric.tone)}" aria-label="${escapeHtml(`${metric.label} — ${t("toneWord", metric.tone)}`)}">
           <span class="metric-label"><span class="material-symbols-rounded" aria-hidden="true">${escapeHtml(metric.icon)}</span>${escapeHtml(metric.label)}</span>
           <span class="metric-value">${escapeHtml(metric.value)}</span>
           <span class="metric-sub">${escapeHtml(metric.sub)}</span>
@@ -1350,7 +1356,7 @@ function renderTopBet({ beach, scored }) {
   const score = scored.score.score;
   const tier = pinClass(score).replace("pin-", "");
   return `
-    <button class="bet-hero tier-${tier}" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}">
+    <button class="bet-hero tier-${tier}" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}" aria-label="${escapeHtml(`${beach.name} · ${scored.score.label} · ${compactSessionRead(scored)}`)}">
       <span class="bet-hero-score ${pinClass(score)}">${score}</span>
       <span class="bet-hero-body">
         <span class="bet-hero-tag">${escapeHtml(t("topPick", scored.score.label))}</span>
@@ -1369,7 +1375,7 @@ function renderBeachRow({ beach, scored }) {
   const sample = scored.sample;
   const score = scored.score.score;
   return `
-    <button class="beach-row" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}">
+    <button class="beach-row" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}" aria-label="${escapeHtml(`${beach.name} · ${scored.score.label}`)}">
       <span class="row-score ${pinClass(score)}">${score}</span>
       <span class="row-copy">
         <span class="row-name">${escapeHtml(beach.name)}</span>
