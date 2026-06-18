@@ -904,8 +904,11 @@ function findClosestRadarFrameIndex(frames, targetTimestampSeconds, toleranceMin
 }
 
 function buildRadarTileUrl(host, frame) {
-  if (!host || !frame?.path) return "";
-  return `${host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
+  const base = typeof host === "string" ? host.trim().replace(/\/+$/, "") : "";
+  const path =
+    typeof frame?.path === "string" ? frame.path.trim().replace(/^\/+/, "") : "";
+  if (!base || !path) return "";
+  return `${base}/${path}/256/{z}/{x}/{y}/2/1_1.png`;
 }
 
 function updateRadarLayer() {
