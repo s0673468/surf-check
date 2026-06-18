@@ -2734,8 +2734,9 @@ function average(values) {
 
 function valueAt(hourly, key, index) {
   const value = hourly?.[key]?.[index];
-  if (value === null || value === undefined || value === "") return null;
-  const numeric = Number(value);
+  const normalized = typeof value === "string" ? value.trim() : value;
+  if (normalized === null || normalized === undefined || normalized === "") return null;
+  const numeric = Number(normalized);
   return Number.isFinite(numeric) ? numeric : null;
 }
 

@@ -210,6 +210,29 @@ test("scored samples align weather, marine, and next tide by timestamp", () => {
   assert.equal(scored.sample.nextSeaLevel, beach.idealTide - 0.03);
 });
 
+test("scored samples keep blank hourly cells missing instead of zero", () => {
+  seedForecasts();
+
+  const beach = surf.selectedBeach();
+  const forecast = surf.state.forecasts.get(beach.id);
+  const target = `${surf.dateKey(0)}T08:00`;
+  const weatherIndex = forecast.weather.time.indexOf(target);
+  const marineIndex = forecast.marine.time.indexOf(target);
+
+  forecast.weather.temperature_2m[weatherIndex] = "  ";
+  forecast.weather.wind_speed_10m[weatherIndex] = " 9 ";
+  forecast.marine.swell_wave_height[marineIndex] = "\t";
+  forecast.marine.wave_height[marineIndex] = " 1.2 ";
+  surf.scoredSampleCache.clear();
+
+  const scored = surf.getScoredSample(beach, 0, 8);
+
+  assert.equal(scored.sample.temperature, null);
+  assert.equal(scored.sample.windSpeed, 9);
+  assert.equal(scored.sample.swellHeight, null);
+  assert.equal(scored.sample.waveHeight, 1.2);
+});
+
 test("day overview describes seeded forecast in both languages", () => {
   seedForecasts();
 
