@@ -22,15 +22,17 @@ Then visit `http://localhost:4173`.
 
 ## Test
 
-Run the no-dependency smoke tests with:
+Validate the static app with the same gates CI runs:
 
 ```bash
+node --check app.js
 npm test
 ```
 
-These cover the scoring model directly — wind monotonicity (no glassy cliff), surfable-floor
-continuity, size separation, period-aware closeout, cross-beach differentiation by exposure
-and angle, the normalized tide state, and the timezone epoch.
+`npm test` runs the no-dependency smoke suite. These cover the scoring model directly —
+wind monotonicity (no glassy cliff), surfable-floor continuity, size separation,
+period-aware closeout, cross-beach differentiation by exposure and angle, the normalized
+tide state, and the timezone epoch.
 
 ## Layout
 
