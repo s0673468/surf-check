@@ -372,16 +372,20 @@ h1 {
 }
 
 .now-chip {
+  align-items: center;
   background: var(--secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   color: var(--fg2);
   cursor: pointer;
+  display: inline-flex;
   font-family: var(--font-display);
   font-size: 0.72rem;
   font-weight: 700;
+  justify-content: center;
   letter-spacing: 0.2px;
-  padding: 4px 12px;
+  min-height: 44px; /* meet the 44px touch-target floor */
+  padding: 4px 16px;
   transition:
     background 140ms ease,
     color 140ms ease,
@@ -854,9 +858,37 @@ h1 {
 }
 
 .legend-swatch {
+  align-items: center;
   border-radius: 50%;
-  height: 10px;
-  width: 10px;
+  display: inline-flex;
+  height: 12px;
+  justify-content: center;
+  width: 12px;
+}
+
+/* Non-color cue: a distinct glyph per tier so swatches stay distinguishable
+   without relying on color alone. Sits inside the dot in the dark canvas ink. */
+.legend-swatch::before {
+  color: var(--canvas);
+  content: "";
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+}
+.legend-swatch.excellent::before {
+  content: "★";
+}
+.legend-swatch.good::before {
+  content: "●";
+}
+.legend-swatch.fair::before {
+  content: "◆";
+}
+.legend-swatch.poor::before {
+  content: "▲";
+}
+.legend-swatch.bad::before {
+  content: "■";
 }
 
 .map-legend span b {
