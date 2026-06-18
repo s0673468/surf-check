@@ -1499,34 +1499,9 @@ const DAY_PROSE = {
   },
 };
 
-function describeDay(dayOffset) {
-  const scan = getDayScan(dayOffset);
-  if (!scan.length) return null;
-
-  const pt = state.lang === "pt";
-  const f = DAY_PROSE[pt ? "pt" : "en"];
-  const entriesByHour = groupScoredEntries(scan, (entry) => entry.hour);
-  const entriesByBeach = groupScoredEntries(scan, (entry) => entry.beach.id);
-
-  // Single best (beach, hour) of the day — drives the headline score.
-  const best = bestScoredEntry(scan);
-  const dayPeak = best.scored.score.score;
-
-  // Best score per hour across all beaches → tells us when the day is good.
-  const hourBest = HOURS.map((hour) => {
-    const hourEntries = entriesByHour.get(hour) ?? [];
-    return hourEntries.length ? { hour, score: bestScoredEntry(hourEntries).scored.score.score } : null;
-  }).filter(Boolean);
-
-  // Best score per beach across the day → which spots to call out.
-  const beachPeak = BEACHES.map((beach) => {
-    const beachEntries = entriesByBeach.get(beach.id) ?? [];
-    return beachEntries.length ? { beach, score: bestScoredEntry(beachEntries).scored.score.score } : null;
-  })
-    .filter(Boolean)
-    .sort(compareByScoreDesc);
-
-  // --- Conditions: representative size + cleanliness at the day's best hour ---
+// Representative size + cleanliness at the day's best hour. Returns the prose
+// keys consumed by describeDay's conditions sentence.
+function summarizeConditions(scan, best, dayPeak) {
   const peakHourEntries = scan.filter((e) => e.hour === best.hour);
   const repHeight = average(
     peakHourEntries.map((e) => effHeight(e.scored.sample)),
@@ -1548,7 +1523,12 @@ function describeDay(dayOffset) {
     cleanKey = windQuality >= 72 ? "clean" : windQuality >= 48 ? "mixed" : "messy";
   }
 
-  // --- Timing: best window + morning vs afternoon trend ---
+  return { sizeKey, cleanKey };
+}
+
+// Best window + morning-vs-afternoon trend across the day. Returns the prose
+// keys plus the window hours describeDay needs for the rain watch-out.
+function summarizeTiming(hourBest, best, dayPeak) {
   const goodThreshold = Math.max(50, dayPeak - 10);
   const goodHours = hourBest.filter((h) => h.score >= goodThreshold).map((h) => h.hour);
   const windowHours = goodHours.length ? goodHours : [best.hour];
@@ -1570,6 +1550,48 @@ function describeDay(dayOffset) {
     if (mAvg - aAvg >= 10) trend = "fadesPM";
     else if (aAvg - mAvg >= 10) trend = "buildsPM";
   }
+
+  return { windowHours, windowKey, allDay, trend };
+}
+
+// Best score per beach across the day, sorted descending → which spots to call
+// out in the prose layer.
+function pickTopBeaches(entriesByBeach) {
+  return BEACHES.map((beach) => {
+    const beachEntries = entriesByBeach.get(beach.id) ?? [];
+    return beachEntries.length ? { beach, score: bestScoredEntry(beachEntries).scored.score.score } : null;
+  })
+    .filter(Boolean)
+    .sort(compareByScoreDesc);
+}
+
+function describeDay(dayOffset) {
+  const scan = getDayScan(dayOffset);
+  if (!scan.length) return null;
+
+  const pt = state.lang === "pt";
+  const f = DAY_PROSE[pt ? "pt" : "en"];
+  const entriesByHour = groupScoredEntries(scan, (entry) => entry.hour);
+  const entriesByBeach = groupScoredEntries(scan, (entry) => entry.beach.id);
+
+  // Single best (beach, hour) of the day — drives the headline score.
+  const best = bestScoredEntry(scan);
+  const dayPeak = best.scored.score.score;
+
+  // Best score per hour across all beaches → tells us when the day is good.
+  const hourBest = HOURS.map((hour) => {
+    const hourEntries = entriesByHour.get(hour) ?? [];
+    return hourEntries.length ? { hour, score: bestScoredEntry(hourEntries).scored.score.score } : null;
+  }).filter(Boolean);
+
+  // Best score per beach across the day → which spots to call out.
+  const beachPeak = pickTopBeaches(entriesByBeach);
+
+  // --- Conditions: representative size + cleanliness at the day's best hour ---
+  const { sizeKey, cleanKey } = summarizeConditions(scan, best, dayPeak);
+
+  // --- Timing: best window + morning vs afternoon trend ---
+  const { windowHours, windowKey, allDay, trend } = summarizeTiming(hourBest, best, dayPeak);
 
   // --- Watch-out: rain over the good window at the top beach ---
   const topId = beachPeak[0]?.beach.id;
