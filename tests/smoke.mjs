@@ -7,6 +7,7 @@ const runtimeSources = [
   "forecast-api.js",
   "score-model.js",
   "forecast-selectors.js",
+  "rain-radar.js",
   "app.js",
 ].map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
 const context = {
