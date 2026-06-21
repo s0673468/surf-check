@@ -102,8 +102,8 @@ enters the score **exactly once**, so nothing is double-counted:
    surge residual, so absolute height isn't a reliable tide phase).
 
 Data is the full swell decomposition from Open-Meteo (primary + secondary swell, wind
-wave, tide via `sea_level_height_msl`). `SIZE_REF` in `app.js` is the main calibration
-knob — raise it for a stricter scale, lower it for a friendlier one. The per-beach
+wave, tide via `sea_level_height_msl`). `SIZE_REF` in `score-model.js` is the main
+calibration knob — raise it for a stricter scale, lower it for a friendlier one. The per-beach
 `swellCenter` / `swellSpread` / `offshoreWind` / `idealTide` (0–1 tide state) /
 `minSurfHeight` / `maxHeight` are tuned from the source-backed priors in
 `docs/spot-research.md`.
