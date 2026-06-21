@@ -86,27 +86,34 @@ RainViewer frame normalization and tile URL handling live in `rain-radar.js`.
 
 ## Scoring model
 
-The 0–100 score is a *clean-swell power, then degrade for wind* model, the shape real
-rating services use (Surf-Forecast / MagicSeaweed / Surfline LOLA). Each physical input
-enters the score **exactly once**, so nothing is double-counted. The implementation
-lives in `score-model.js`:
+The 0–100 score is a *clean-swell power, then degrade for wind* core, the shape real
+rating services use (Surf-Forecast / MagicSeaweed / Surfline LOLA), plus one deliberate
+**clean-fun** term on top (see 7). Each physical input enters the **core** exactly once,
+so the power model never double-counts. The implementation lives in `score-model.js`:
 
-1. **Size — breaking height, soft-knee.** Deep-water swell shoals into a taller breaker
-   the longer its period (`breakingHeight`), and a sheltered bay sheds part of that
-   height (`shelterAttenuation`) — so Ingleses/Armação/Barra read smaller on average
-   (they're "too small" more often) yet survive as the clean-up call on oversized days
-   when open beaches close out. The size term is a **soft knee** (`SIZE_REF`, the main
-   calibration knob) with diminishing returns and *no early saturation*, so the whole
-   0.6–3.5 m range stays separable.
-2. **Period — quality multiplier.** `periodCurve` is a smooth curve that heavily docks
-   windsea (~6 s), lets solid groundswell (10–13 s) score near-full, and tops out for
-   premium long period (14 s+). Period multiplies size; it is *not* also folded into the
-   size term.
+1. **Size — breaking height of the combined sea, soft-knee.** Size and period read the
+   *combined* sea (`wave_height`/`wave_period`), not the dominant swell sub-partition —
+   Open-Meteo often splits a small day into a short primary swell plus a separate
+   longer-period secondary, so the partition alone can read ~40 % smaller than what
+   actually breaks. (Direction stays on the swell partition — "where's the groundswell
+   from" is the meaningful angle.) Deep-water swell shoals taller the longer its period
+   (`breakingHeight`), and a sheltered bay sheds part of that height (`shelterAttenuation`)
+   — so Ingleses/Armação/Barra read smaller on average (they're "too small" more often)
+   yet survive as the clean-up call on oversized days. The size term is a **soft knee**
+   (`SIZE_REF`) with diminishing returns and *no early saturation*, so the whole 0.6–3.5 m
+   range stays separable.
+2. **Period — quality multiplier.** `periodCurve` is a smooth curve. Short clean swell
+   (5–7 s — the bread and butter of small fun beachbreak here) keeps real value (floor
+   `0.55`) rather than being written off; solid groundswell (10–12 s) scores near-full and
+   premium long period (15 s+) tops out. The windsea *mess* is docked by cleanliness, not
+   here, so period only measures swell quality. Period multiplies size; it is *not* also
+   folded into the size term.
 3. **Cleanliness, direction, closeout.** A **windsea-contamination** penalty cuts quality
-   when the wind-wave partition is large; **swell direction** modulates against each
-   beach's window (`directionWindowScore`, where the configured `swellSpread` is the real
-   window); a **period-aware closeout** penalty bites smoothly once the swell overpowers
-   the beach (long groundswell holds bigger than short windsea).
+   when the wind-wave partition is large (computed from the swell *partition* energy, so
+   sizing on the combined sea never launders chop into free size); **swell direction**
+   modulates against each beach's window (`directionWindowScore`, where the configured
+   `swellSpread` is the real window); a **period-aware closeout** penalty bites smoothly
+   once the swell overpowers the beach (long groundswell holds bigger than short windsea).
 4. **Surfable floor.** Below a per-spot rideable floor (`DEFAULT_MIN_SURF_HEIGHT`, e.g.
    `minSurfHeight` 0.7 m for Ingleses) the size curve falls off continuously — no cliff at
    the boundary — so `0.5 m @ 16 s` reads Poor even though it's clean.
@@ -114,13 +121,26 @@ lives in `score-model.js`:
    (`windQualityFactor`): glassy is good, clean **light offshore is ideal** (and never
    scores below glassy — the old 4 km/h cliff is gone), **cross-shore** adds chop,
    **onshore** degrades from the ~13 km/h whitecap threshold, **bigger swell shrugs wind
-   off**, and gusts / very strong wind from any quarter taper it toward zero. A great swell
-   blown out by strong onshore collapses to Poor.
+   off**, and gusts / very strong wind from any quarter taper it toward zero (only *real*
+   gust spread, beyond ~8 km/h, counts — a glassy morning with the odd puff stays glassy).
+   A great swell blown out by strong onshore collapses to Poor.
 6. **Context (gated).** Coastal depth fit, **tide**, and weather contribute a small amount
-   *gated by the core* so they can't lift a flat or blown-out hour. Tide is compared as a
-   normalized **low/mid/high state** within the day's local range, not as absolute metres
-   (Open-Meteo's `sea_level_height_msl` is referenced to the global datum and carries a
-   surge residual, so absolute height isn't a reliable tide phase).
+   *gated by the core* so they can't lift a flat or blown-out hour — but a calm-clean-
+   rideable day lets the context through (good tide and a clear sky *do* matter when it's
+   actually nice out). Tide is compared as a normalized **low/mid/high state** within the
+   day's local range, not as absolute metres (Open-Meteo's `sea_level_height_msl` is
+   referenced to the global datum and carries a surge residual, so absolute height isn't a
+   reliable tide phase).
+7. **Clean-fun (the one composite).** A pure power engine buries small days: a rideable,
+   clean, glassy, in-window day with little power scores ~Poor even when it's a genuinely
+   good call to paddle out (the kind of fine small Matadeiro morning that draws a crowd).
+   `CLEAN_FUN_BONUS` earns those sessions points back. It's a deliberate composite, gated
+   on *every* condition that makes it true: rideable (above the surfable floor), clean,
+   **groomed period** (a separate gate — short windsea dumped into the swell columns earns
+   nothing), glassy **and not onshore**, in-window, and **not big** (fades out by head-high
+   so a closeout never qualifies). It fades on the score's own **headroom**, not on size,
+   so it lifts low-scoring small days but can *never* invert a bigger/cleaner day below a
+   smaller one. Big/blown/choppy/flat/off-window days keep their power-only score.
 
 Data is the full swell decomposition from Open-Meteo (primary + secondary swell, wind
 wave, tide via `sea_level_height_msl`). `SIZE_REF` in `score-model.js` is the main

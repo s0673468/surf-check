@@ -447,6 +447,133 @@ test("scoring tiny long-period swell still reads Poor", () => {
   assert.ok(tiny.score < 38, `0.5m@16s should be Poor, got ${tiny.score}`);
 });
 
+// Frozen from the live Open-Meteo feed for Matadeiro on the morning German
+// surfed it (clean 0.86 m / 6.7 s SE sea, glassy 2 km/h) - the session that the
+// old model buried at 3/100 by sizing on the 0.52 m swell sub-partition.
+const matadeiroCleanMorning = {
+  temperature: 14,
+  precipitationProbability: 0,
+  cloudCover: 26,
+  windSpeed: 1.8,
+  windDirection: 79,
+  windGusts: 9.4,
+  waveHeight: 0.86,
+  waveDirection: 138,
+  wavePeriod: 6.7,
+  swellHeight: 0.52,
+  swellDirection: 107,
+  swellPeriod: 5.55,
+  secondarySwellHeight: 0.32,
+  secondarySwellDirection: 88,
+  secondarySwellPeriod: 8.8,
+  windWaveHeight: 0,
+  windWavePeriod: 0,
+  seaLevel: 0.16,
+  nextSeaLevel: 0.12,
+  seaTemperature: 18.2,
+  tideState: 0.21,
+};
+
+test("scoring sizes on the combined sea, not the smaller swell sub-partition", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const scored = surf.scoreSample(beach, matadeiroCleanMorning, 0);
+
+  // breakingHeight must track the 0.86 m combined sea, not the 0.52 m partition.
+  const combined = surf.effectiveBreakingHeight(beach, 0.86, 6.7);
+  const partitionOnly = surf.effectiveBreakingHeight(beach, 0.52, 5.55);
+  assert.ok(
+    Math.abs(scored.detail.breakingHeight - combined) < 0.02,
+    `breakingHeight ${scored.detail.breakingHeight} should match combined ${combined}`,
+  );
+  assert.ok(scored.detail.breakingHeight > partitionOnly + 0.1, "combined sea must read bigger than the sub-partition");
+});
+
+test("a clean, glassy, rideable small day reads Surfável, not Poor", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const scored = surf.scoreSample(beach, matadeiroCleanMorning, 0);
+
+  assert.ok(scored.score >= 52, `clean glassy rideable morning should be Surfável+, got ${scored.score}`);
+  assert.ok(scored.detail.cleanFun > 0.1, `clean-fun term should be active, got ${scored.detail.cleanFun}`);
+  assert.ok(scored.reasons.some((reason) => reason.includes("glassy")), "should explain the small clean call");
+});
+
+test("the clean-fun bonus is gated off when the same swell blows out", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const blown = surf.scoreSample(
+    beach,
+    {
+      ...matadeiroCleanMorning,
+      windSpeed: 34,
+      windGusts: 44,
+      windDirection: (beach.offshoreWind + 180) % 360,
+      windWaveHeight: 0.9,
+      windWavePeriod: 4,
+    },
+    0,
+  );
+
+  assert.ok(blown.detail.cleanFun < 0.05, `windy/choppy day must not earn clean-fun, got ${blown.detail.cleanFun}`);
+  assert.ok(blown.score < 40, `blown-out small day should stay Poor/Marginal, got ${blown.score}`);
+});
+
+test("the clean-fun bonus cannot lift a sub-floor day off the Poor tier", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const floor = surf.surfableHeightFloor(beach);
+  // Glassy, clean, in-window, but below the surfable floor: must stay Poor.
+  const subFloor = surf.scoreSample(
+    beach,
+    { ...matadeiroCleanMorning, waveHeight: floor - 0.15, swellHeight: floor - 0.15 },
+    0,
+  );
+
+  assert.ok(subFloor.detail.cleanFun < 0.05, `sub-floor day must not earn clean-fun, got ${subFloor.detail.cleanFun}`);
+  assert.ok(subFloor.score < 38, `sub-floor day should read Poor, got ${subFloor.score}`);
+});
+
+test("short-period chop in the swell columns does not earn the clean-fun bonus", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  // Above the floor, glassy, in-window, windWave≈0 — but a 3 s sea is wind chop,
+  // not surf. Open-Meteo reports exactly this in the swell columns on small days.
+  const chop = surf.scoreSample(
+    beach,
+    { ...matadeiroCleanMorning, waveHeight: 0.9, wavePeriod: 3, swellHeight: 0.9, swellPeriod: 3, secondarySwellHeight: 0 },
+    0,
+  );
+  assert.ok(chop.detail.cleanFun < 0.05, `3 s chop must not earn clean-fun, got ${chop.detail.cleanFun}`);
+  assert.ok(chop.score < 45, `3 s chop should not reach Surfável, got ${chop.score}`);
+});
+
+test("adding clean size never inverts the score on a glassy in-window day", () => {
+  ["matadeiro", "joaquina"].forEach((id) => {
+    const beach = surf.BEACHES.find((item) => item.id === id);
+    const at = (height) =>
+      surf.scoreSample(
+        beach,
+        {
+          ...matadeiroCleanMorning,
+          waveHeight: height,
+          wavePeriod: 8,
+          swellHeight: height,
+          swellPeriod: 8,
+          swellDirection: beach.swellCenter,
+          waveDirection: beach.swellCenter,
+          secondarySwellHeight: 0,
+          windSpeed: 3,
+          windDirection: beach.offshoreWind,
+        },
+        0,
+      ).score;
+    const heights = [0.7, 0.9, 1.1, 1.3, 1.6, 2.0, 2.5];
+    const scores = heights.map(at);
+    for (let i = 1; i < scores.length; i += 1) {
+      assert.ok(
+        scores[i] >= scores[i - 1] - 3,
+        `${id} clean-size inversion: ${heights.join("/")} -> ${scores.join("/")}`,
+      );
+    }
+  });
+});
+
 test("wind factor is monotonic and front-loads light offshore over glassy", () => {
   const beach = surf.BEACHES.find((item) => item.id === "joaquina");
   const wf = (speed) =>

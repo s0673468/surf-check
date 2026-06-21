@@ -1,19 +1,32 @@
 // ---------------------------------------------------------------------------
 // Scoring model - "clean-swell power, then degrade for wind", the shape real
 // rating engines use (MSW / Surf-Forecast / Surfline LOLA). Each physical input
-// enters the score exactly once:
-//   size    -> shelter-attenuated breaking height, soft-knee saturated
+// enters the core score exactly once:
+//   size    -> shelter-attenuated breaking height of the combined sea, soft-knee
 //   period  -> periodCurve quality multiplier
-//   chop    -> windsea-contamination cleanliness
+//   chop    -> windsea-contamination cleanliness (from the swell partition)
 //   angle   -> directionFit (swell vs the beach's window)
 //   wind    -> windQualityFactor (multiplicative gate)
 //   shelter -> attenuates the breaking height, so sheltered bays read smaller on
 //              average (they are "too small" more often) yet survive as the
 //              clean-up call on oversized days when open beaches close out.
+//
+// On top of the power core sits ONE deliberate composite, the clean-fun term: a
+// rideable (above the surfable floor), clean, groomed-period, glassy, in-window
+// SMALL day is a genuinely good call to paddle out even though it carries little
+// power - the pure power engine buries exactly those sessions at "Poor". The term
+// is gated on every one of those conditions (so it can never lift a sub-floor,
+// choppy, short-period, windy, off-window, or big forecast) and it fades on the
+// score's own HEADROOM rather than on size, so it lifts low-scoring small days
+// without ever inverting a bigger/cleaner day below a smaller one.
+//
 // SIZE_REF is the main calibration knob: the breaking height (m) at which the
 // size term reaches 0.5. Lower it for a friendlier scale, raise it for stricter.
+// CLEAN_FUN_BONUS is how many points a perfect clean-glassy-rideable small day
+// can earn back on top of its power core.
 // ---------------------------------------------------------------------------
-const SIZE_REF = 0.9;
+const SIZE_REF = 0.8;
+const CLEAN_FUN_BONUS = 64;
 const DEFAULT_MIN_SURF_HEIGHT = 0.6;
 const DEFAULT_FULL_SURF_HEIGHT = 0.95;
 const SHELTER_ENERGY_LOSS = 0.4; // a fully sheltered bay sheds ~40% of the open-coast breaking height
@@ -38,15 +51,23 @@ function shelterAttenuation(beach) {
   return 1 - SHELTER_ENERGY_LOSS * shelter;
 }
 
-// Primary-swell value with a wind-wave fallback. The marine feed sometimes omits
-// the partitioned swell columns, so the prose/score layers read the combined
-// wave figures when the swell partition is missing.
+// What the surfer actually rides is the COMBINED sea, not the dominant swell
+// partition. Open-Meteo frequently splits a small day into a short primary swell
+// plus a separate longer-period secondary, so the partition alone can read ~40%
+// smaller (and shorter) than the real breaking sea - which is what sank a clean
+// 0.86 m / 6.7 s morning to "3/100". So SIZE, PERIOD, prose and the surfable-floor
+// gate read the combined wave figures (falling back to the swell partition only
+// when the combined columns are missing). DIRECTION stays on the swell partition:
+// "where is the groundswell from" is the meaningful angle for the beach window,
+// and the prose calls it "swell from X". Cleanliness is kept honest separately:
+// its clean-swell energy reads the swell partition (see scoreSample), so wind-chop
+// still enters as dirt, not as free size.
 function effHeight(sample) {
-  return sample.swellHeight ?? sample.waveHeight;
+  return Math.max(sample.waveHeight ?? 0, sample.swellHeight ?? 0) || (sample.swellHeight ?? sample.waveHeight);
 }
 
 function effPeriod(sample) {
-  return sample.swellPeriod ?? sample.wavePeriod;
+  return sample.wavePeriod ?? sample.swellPeriod;
 }
 
 function effDir(sample) {
@@ -72,17 +93,20 @@ function sizeMagnitude(hb) {
   return (hb * hb) / (hb * hb + SIZE_REF * SIZE_REF);
 }
 
-// Period-quality multiplier: windsea ~6 s heavily docked, solid groundswell
-// 10-13 s nearly full, premium 14 s+ topped out. Smooth (no slope kinks).
+// Period-quality multiplier. Short clean swell (5-7 s) is the bread and butter
+// of small fun beachbreak days here, so it keeps real value (floor 0.55) rather
+// than being treated as garbage; solid groundswell 10-12 s is nearly full,
+// premium 15 s+ tops out. The windsea MESS is docked by cleanliness, not here,
+// so period only measures swell quality. Smooth (no slope kinks).
 function periodCurve(period) {
-  if (!Number.isFinite(period)) return 0.35;
-  if (period <= 6) return 0.4;
-  if (period >= 16) return 1;
-  if (period <= 13) {
-    const x = (period - 6) / 7; // 0..1 across 6-13 s
-    return 0.4 + 0.55 * (x * x * (3 - 2 * x)); // smoothstep 0.40 -> 0.95
+  if (!Number.isFinite(period)) return 0.4;
+  if (period <= 5) return 0.55;
+  if (period >= 15) return 1;
+  if (period <= 12) {
+    const x = (period - 5) / 7; // 0..1 across 5-12 s
+    return 0.55 + 0.4 * (x * x * (3 - 2 * x)); // smoothstep 0.55 -> 0.95
   }
-  return 0.95 + 0.05 * ((period - 13) / 3); // 0.95 -> 1.00 across 13-16 s
+  return 0.95 + 0.05 * ((period - 12) / 3); // 0.95 -> 1.00 across 12-15 s
 }
 
 function surfableHeightFloor(beach) {
@@ -143,8 +167,11 @@ function windQualityFactor(beach, sample, sizeMag = 0.5) {
   // Cross-shore chop bites even when nominally offshore.
   factor -= crossComp * clamp((speed - 13) / 32, 0, 1) * 0.32 * sizeShield;
 
+  // Gustiness only chops the face once the spread is real - a glassy 2 km/h
+  // morning with the odd 9 km/h puff is still glassy, so the first ~8 km/h of
+  // spread is free before the penalty bites.
   const gustSpread = Math.max(0, (Number.isFinite(gusts) ? gusts : speed) - speed);
-  factor *= clamp(1 - gustSpread / 45, 0.4, 1);
+  factor *= clamp(1 - Math.max(0, gustSpread - 8) / 40, 0.4, 1);
   factor *= clamp(1 - Math.max(0, speed - 35) / 45, 0.06, 1); // strong wind, any direction
 
   return clamp(factor, 0.03, 1);
@@ -160,7 +187,9 @@ function scoreSample(beach, sample, dayOffset) {
   // Clean-swell energy = primary + the secondary swell weighted by its OWN period
   // and direction quality (a long-period in-window secondary is real rideable
   // energy; a short off-window one is just chop). Wind-wave = contamination.
-  const ePrimary = waveEnergy(swellHeight, swellPeriod);
+  // This reads the swell PARTITION (not effHeight, which is the combined sea used
+  // for size) so the windsea fraction below stays a true cleanliness measure.
+  const ePrimary = waveEnergy(sample.swellHeight ?? sample.waveHeight, sample.swellPeriod ?? sample.wavePeriod);
   const eSecondaryRaw = waveEnergy(sample.secondarySwellHeight, sample.secondarySwellPeriod);
   const secondaryWeight = clamp(
     periodCurve(sample.secondarySwellPeriod) *
@@ -196,19 +225,44 @@ function scoreSample(beach, sample, dayOffset) {
   const directionFit = directionWindowScore(swellDirection, beach.swellCenter, beach.swellSpread);
   const potential = swellQuality * (0.45 + 0.55 * directionFit); // direction modulates, never zeroes
 
-  // Wind multiplies the clean-swell potential; a blown-out day keeps little of it.
+  // Wind multiplies the clean-swell potential; a blown-out day keeps little of
+  // it (wind weighs heavier than the old 0.18/0.82 split - glassy is the prize).
   const windFactor = windQualityFactor(beach, sample, sizeMag);
-  const core = potential * (0.18 + 0.82 * windFactor);
+  const core = potential * (0.12 + 0.88 * windFactor);
 
-  // Context (coastal depth fit, tide, weather) is small and gated by core so it
-  // cannot lift a flat or blown-out hour. Direction and shelter already live in core.
+  // Clean-fun gates: the conditions that make a small day worth paddling out for.
+  // rideableSize is 0 at/below the surfable floor; glassiness wants light wind;
+  // notBig keeps this to genuinely small surf (fades out by head-high so a big
+  // closeout never qualifies). Reused below for the context gate and the bonus.
+  const surfFloor = surfableHeightFloor(beach);
+  const rideableSize = smoothstep(swellHeight, surfFloor, surfFloor * 1.4); // 0 at/below floor
+  const glassiness = clamp(1 - (sample.windSpeed ?? 0) / 16, 0, 1);
+  const notBig = 1 - smoothstep(hb, 1.8, 2.7); // ~1 for small surf, ->0 for big/closeout
+  const calmCleanRideable = rideableSize * cleanliness * glassiness;
+
+  // Context (coastal depth fit, tide, weather) is small. It is gated by core so a
+  // flat/blown hour cannot borrow from it, but a calm-clean-rideable day lets it
+  // through (good tide and a clear sky DO matter when it is actually nice out).
   const tideFit = tideScore(sample.tideState, beach.idealTide, beach.tideSpread);
   const coastalFit = coastalFitScore(beach, sizeMag) / 100;
   const weatherFit = clamp(1 - rain / 170 - cloud / 500, 0.18, 1);
   const context = 0.55 * coastalFit + 0.28 * tideFit + 0.17 * weatherFit;
-  const coreGate = smoothstep(core, 0.08, 0.5);
+  const coreGate = clamp(smoothstep(core, 0.08, 0.5) + 0.9 * calmCleanRideable, 0, 1);
+  const baseScore = 0.85 * core + 0.15 * context * coreGate;
 
-  const score = Math.round(clamp(100 * (0.85 * core + 0.15 * context * coreGate), 0, 100));
+  // Clean-fun bonus: rescue points for a rideable + clean + GROOMED-period +
+  // glassy-and-not-onshore + in-window + small day. periodFit only feeds the power
+  // core, so a separate period gate is needed here or short windsea dumped into the
+  // swell columns would earn the bonus. It fades on score HEADROOM (not size), so it
+  // lifts low-scoring small days yet can never invert a bigger/cleaner day below a
+  // smaller one. notBig keeps it off big closeouts that score low for other reasons.
+  const groomedPeriod = smoothstep(swellPeriod, 4, 6.5); // real swell, not 3-5 s chop
+  const windNice = glassiness * windFactor; // light AND good-direction, not just calm
+  const headroom = clamp(1 - baseScore / 0.82, 0, 1); // only rescues low-scoring days
+  const cleanFun =
+    rideableSize * cleanliness * groomedPeriod * windNice * directionFit * notBig * headroom;
+
+  const score = Math.round(clamp(100 * baseScore + CLEAN_FUN_BONUS * cleanFun, 0, 100));
   const confidence = [94, 87, 76, 64][dayOffset] ?? 60;
 
   const windDiff = angularDiff(sample.windDirection, beach.offshoreWind);
@@ -238,6 +292,7 @@ function scoreSample(beach, sample, dayOffset) {
       windFactor,
       cleanliness,
       oversize,
+      cleanFun,
       minSurfHeight: surfableHeightFloor(beach),
     },
     windQuality,
@@ -256,6 +311,7 @@ function scoreSample(beach, sample, dayOffset) {
       windQuality,
       tideTrend,
       tideQuality,
+      cleanFun,
       score,
     }),
   };
@@ -274,6 +330,7 @@ function buildReasons(context) {
     windQuality,
     tideTrend,
     tideQuality,
+    cleanFun,
     score,
   } = context;
   const pt = state.lang === "pt";
@@ -303,6 +360,10 @@ function buildReasons(context) {
       pt
         ? `Altura abaixo do piso surfável de ${formatNumber(minSurfHeight, 1)} m`
         : `Height below the ${formatNumber(minSurfHeight, 1)} m surfable floor`,
+    );
+  } else if (Number.isFinite(cleanFun) && cleanFun >= 0.1 && score >= 52) {
+    reasons.push(
+      pt ? "Pequeno mas limpo e glassy — vale a remada" : "Small but clean and glassy — worth the paddle",
     );
   } else if (Number.isFinite(windseaFrac) && windseaFrac >= 0.45) {
     reasons.push(pt ? "Mar de vento bagunçando o swell" : "Wind-sea is contaminating the swell");
