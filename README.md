@@ -32,7 +32,23 @@ npm test
 `npm test` runs the no-dependency smoke suite. These cover the scoring model directly —
 wind monotonicity (no glassy cliff), surfable-floor continuity, size separation,
 period-aware closeout, cross-beach differentiation by exposure and angle, the normalized
-tide state, and the timezone epoch.
+tide state, and the timezone epoch. The suite loads the same classic scripts as
+`index.html`, in page order, so split-file script ordering stays covered.
+
+## Runtime structure
+
+The app deliberately stays as classic scripts with no bundler:
+
+- `forecast-api.js` — Open-Meteo hourly field lists, beach forecast URL construction,
+  payload validation, shared `fetchJson` retry behavior, and delay handling.
+- `score-model.js` — the 0–100 scoring model, score tiers, score labels, scoring
+  reasons, and swell/wind/tide scoring helpers.
+- `forecast-selectors.js` — selected-hour forecast views, scored-sample extraction,
+  memoization, rankings, nearby-beach comparisons, and tide-state normalization.
+- `rain-radar.js` — RainViewer metadata loading, frame normalization, frame matching,
+  tile URL construction, and Leaflet radar layer lifecycle.
+- `app.js` — beach/profile data, localization, state, orchestration, DOM rendering,
+  map marker rendering, day/spot prose, and shared formatting helpers.
 
 ## Layout
 
@@ -40,7 +56,8 @@ tide state, and the timezone epoch.
 - **The day at a glance** — one plain-language paragraph summarizing the whole selected
   day: overall size and cleanliness, the best time window, the top one or two beaches,
   and a rain watch-out. Whole-day peak score on the left (vs. Best bets, which is the
-  selected hour). Generated in-browser from the same scored samples — see `describeDay`.
+  selected hour). Generated in-browser from the same scored samples — see `describeDay`
+  in `app.js` and scored-sample extraction in `forecast-selectors.js`.
 - **Best bets** — beaches ranked for the selected day/hour, with the top pick highlighted.
 - **Map** — the same scores as colored pins around the island (Leaflet + OpenStreetMap),
   plus a RainViewer rain layer when radar data exists for the selected surf hour.
@@ -64,11 +81,15 @@ The app calls Open-Meteo directly from the browser (no key required):
 - **RainViewer API** — recent radar frames for the map overlay. RainViewer only covers
   the recent window, so future surf hours still use Open-Meteo rain probability.
 
+Open-Meteo fetch/retry and hourly payload normalization live in `forecast-api.js`.
+RainViewer frame normalization and tile URL handling live in `rain-radar.js`.
+
 ## Scoring model
 
 The 0–100 score is a *clean-swell power, then degrade for wind* model, the shape real
 rating services use (Surf-Forecast / MagicSeaweed / Surfline LOLA). Each physical input
-enters the score **exactly once**, so nothing is double-counted:
+enters the score **exactly once**, so nothing is double-counted. The implementation
+lives in `score-model.js`:
 
 1. **Size — breaking height, soft-knee.** Deep-water swell shoals into a taller breaker
    the longer its period (`breakingHeight`), and a sheltered bay sheds part of that
