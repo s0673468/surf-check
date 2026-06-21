@@ -3,9 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const runtimeSources = ["score-model.js", "forecast-selectors.js", "app.js"].map((file) =>
-  readFileSync(new URL(`../${file}`, import.meta.url), "utf8"),
-);
+const runtimeSources = [
+  "forecast-api.js",
+  "score-model.js",
+  "forecast-selectors.js",
+  "app.js",
+].map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
 const context = {
   console,
   URL,
