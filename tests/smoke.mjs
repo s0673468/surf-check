@@ -3,7 +3,13 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const appSource = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const runtimeSources = [
+  "forecast-api.js",
+  "score-model.js",
+  "forecast-selectors.js",
+  "rain-radar.js",
+  "app.js",
+].map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
 const context = {
   console,
   URL,
@@ -31,7 +37,7 @@ const context = {
 
 vm.createContext(context);
 vm.runInContext(
-  `${appSource}
+  `${runtimeSources.join("\n")}
 globalThis.__surfCheckTest = {
   BEACHES,
   HOURS,
