@@ -21,9 +21,19 @@ jobs:
         with:
           node-version: 22
 
-      - name: Syntax-check all runtime scripts
-        run: |
-          for f in forecast-api.js score-model.js forecast-selectors.js rain-radar.js app.js; do
-            node --check "$f"
-          done
-      - run: npm test
+      - name: Run checks
+        run: make check
+
+  workflow-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - run: find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0 | xargs -0 actionlint
