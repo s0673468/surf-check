@@ -6,6 +6,10 @@ are the best bets, and tap one for a plain-language detail view.
 
 Pure HTML/CSS/JS, no build step, no API keys.
 
+> **Surf a different coast?** The engine is region-agnostic — the location lives
+> entirely in config. See [`docs/fork-your-own-coast.md`](docs/fork-your-own-coast.md)
+> to point it at your own beaches in six small edits.
+
 **Languages:** Portuguese (default) and English, toggled top-right (`PT` / `EN`). The
 choice is remembered via `localStorage`. Dates, compass points, score labels, and all
 generated prose localize together.
@@ -151,6 +155,19 @@ calibration knob — raise it for a stricter scale, lower it for a friendlier on
 
 These are heuristics over model data — not live human surf reports. Always worth a real
 look at the beach before paddling out.
+
+## Fork it for your own coast
+
+Florianópolis is the showcase, not a hard dependency. Open-Meteo's forecast and
+marine APIs cover the whole planet, so you can retarget the app to any coastline
+by editing a config array, a timezone, a map center, and a few page strings — no
+build step, no keys, no backend. The full walkthrough (the `BEACHES` schema, the
+optional per-spot physics knobs, and how to find `swellCenter`/`offshoreWind` for
+a new break) is in [`docs/fork-your-own-coast.md`](docs/fork-your-own-coast.md).
+
+## License
+
+[MIT](LICENSE) — © 2026 German Chernukhin. Fork it, rename it, ship your own coast.
 
 ## Deploy (GitHub Pages)
 
