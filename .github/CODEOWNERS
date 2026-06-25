@@ -1,0 +1,16 @@
+# Ownership map only. Review enforcement is controlled by branch protection.
+
+# CI and update automation.
+.github/CODEOWNERS @s0673468
+.github/dependabot.yml @s0673468
+.github/workflows/ @s0673468
+package.json @s0673468
+
+# Forecast fetch, resilience, scoring, and public runtime output.
+forecast-api.js @s0673468
+forecast-selectors.js @s0673468
+rain-radar.js @s0673468
+score-model.js @s0673468
+app.js @s0673468
+index.html @s0673468
+styles.css @s0673468
