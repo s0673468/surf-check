@@ -43,16 +43,18 @@ Agent-facing operating notes for this repo.
 - The canonical local gates are:
 
 ```bash
-node --check app.js
+node --check app.js   # CI now syntax-checks all five runtime scripts
 npm test
 ```
 
-- `npm test` runs the no-dependency smoke suite in
+- `npm test` runs the no-dependency smoke suite (55 tests) in
   [tests/smoke.mjs](tests/smoke.mjs). It loads all runtime scripts in the same
   order as [index.html](index.html). If you change runtime selectors, scoring,
   API resilience, localization, or radar helpers, add or update focused coverage
-  there. For syntax-only confidence on a touched split file, also run
-  `node --check <file>`.
+  there. Scoring helpers that are only exercised transitively (e.g. `tideScore`,
+  `coastalFitScore`, `surfableHeightFactor`, `numericCell`) are exported into the
+  test harness for direct unit tests — keep that list in sync when you add one.
+  For syntax-only confidence on a touched split file, also run `node --check <file>`.
 - Do not add snapshot churn or DOM-heavy test scaffolding for logic that can be
   tested directly through the exported runtime helpers.
 

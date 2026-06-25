@@ -21,5 +21,9 @@ jobs:
         with:
           node-version: 22
 
-      - run: node --check app.js
+      - name: Syntax-check all runtime scripts
+        run: |
+          for f in forecast-api.js score-model.js forecast-selectors.js rain-radar.js app.js; do
+            node --check "$f"
+          done
       - run: npm test

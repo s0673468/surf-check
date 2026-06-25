@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Surf check">
+  <rect width="64" height="64" rx="14" fill="#1B1B29" />
+  <path
+    d="M6 42c6 0 8-5 14-5s8 5 14 5 8-5 14-5 8 5 10 5"
+    fill="none"
+    stroke="#2dd4bf"
+    stroke-width="4.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M6 51c6 0 8-4 14-4s8 4 14 4 8-4 14-4 8 4 10 4"
+    fill="none"
+    stroke="#2dd4bf"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.55"
+  />
+  <circle cx="46" cy="20" r="7" fill="#fde047" />
+</svg>

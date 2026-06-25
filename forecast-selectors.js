@@ -83,7 +83,11 @@ function compareByScoreDesc(a, b) {
 const scoredSampleCache = new Map();
 
 function getScoredSample(beach, dayOffset, hour) {
-  const key = `${state.lang}:${beach.id}:${dayOffset}:${hour}`;
+  // Key on the ABSOLUTE date, not the relative dayOffset: dateKey() resolves
+  // against new Date() at call time, so a cache keyed on the offset alone would
+  // serve yesterday's scores under today's labels if the tab is left open across
+  // local midnight. Encoding the resolved date makes stale entries simply miss.
+  const key = `${state.lang}:${beach.id}:${dateKey(dayOffset)}:${hour}`;
   if (scoredSampleCache.has(key)) return scoredSampleCache.get(key);
   const result = computeScoredSample(beach, dayOffset, hour);
   scoredSampleCache.set(key, result);
@@ -122,6 +126,7 @@ function computeScoredSample(beach, dayOffset, hour) {
     secondarySwellDirection: valueAt(forecast.marine, "secondary_swell_wave_direction", marineIndex),
     secondarySwellPeriod: valueAt(forecast.marine, "secondary_swell_wave_period", marineIndex),
     windWaveHeight: valueAt(forecast.marine, "wind_wave_height", marineIndex),
+    windWaveDirection: valueAt(forecast.marine, "wind_wave_direction", marineIndex),
     windWavePeriod: valueAt(forecast.marine, "wind_wave_period", marineIndex),
     seaLevel: valueAt(forecast.marine, "sea_level_height_msl", marineIndex),
     seaTemperature: valueAt(forecast.marine, "sea_surface_temperature", marineIndex),

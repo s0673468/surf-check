@@ -58,12 +58,18 @@ globalThis.__surfCheckTest = {
   selectedBeach,
   windQualityFactor,
   surfableHeightFloor,
+  surfableHeightFactor,
   sizeMagnitude,
   effectiveBreakingHeight,
   directionWindowScore,
+  coastalFitScore,
+  tideScore,
   tideStateAt,
   selectedForecastTimestampSeconds,
   degToCompass,
+  numericCell,
+  compactSessionRead,
+  confidenceMeta,
   scoredSampleCache,
 };`,
   context,
@@ -871,4 +877,223 @@ test("beach forecasts normalize missing optional hourly fields", async () => {
       assert.deepEqual(Array.from(forecast.marine.sea_surface_temperature), [null, null]);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// Release-hardening coverage: wind-direction monotonicity, gust gating, the
+// closeout floor, period/cleanliness refinements, exposure-class direction cap,
+// missing-weather neutrality, cache date keying, and the helper unit tests the
+// pre-release review flagged as load-bearing-but-untested.
+// ---------------------------------------------------------------------------
+
+function windFactorAt(beach, off, speed, sizeMag = 0.6) {
+  return surf.windQualityFactor(
+    beach,
+    { windSpeed: speed, windDirection: (beach.offshoreWind + off) % 360, windGusts: speed },
+    sizeMag,
+  );
+}
+
+test("wind factor never improves as the wind rotates offshore -> onshore (no cross-shore jump)", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  // Speeds kept <=30 so the intentional strong-offshore over-hold dip (>32 km/h)
+  // does not register as a (benign) offshore-side non-monotonicity.
+  for (const speed of [8, 14, 20, 26, 30]) {
+    for (let off = 1; off <= 180; off += 1) {
+      const here = windFactorAt(beach, off, speed);
+      const prev = windFactorAt(beach, off - 1, speed);
+      assert.ok(here <= prev + 1e-9, `wind factor rose at ${off}deg / ${speed} km/h (${prev} -> ${here})`);
+    }
+  }
+  // The old branch split jumped ~+0.1 across the 90deg cross-shore seam.
+  assert.ok(windFactorAt(beach, 91, 20) <= windFactorAt(beach, 89, 20) + 1e-9, "no jump across cross-shore");
+  // Dead onshore is the worst wind, not better than an oblique onshore.
+  assert.ok(windFactorAt(beach, 180, 20) <= windFactorAt(beach, 170, 20) + 1e-9, "dead onshore is worst");
+});
+
+test("wind factor: cross-shore is worse than offshore and bigger swell shrugs onshore wind", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  assert.ok(windFactorAt(beach, 90, 18) < windFactorAt(beach, 0, 18), "cross-shore below offshore");
+  // Size shield: a bigger swell holds more of its quality under the same onshore wind.
+  assert.ok(
+    windFactorAt(beach, 180, 22, 0.9) > windFactorAt(beach, 180, 22, 0.2),
+    "bigger swell resists onshore wind",
+  );
+});
+
+test("a glassy morning is not demoted by a spurious gust spike, but real wind still is", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const calm = surf.windQualityFactor(beach, { windSpeed: 3, windDirection: beach.offshoreWind, windGusts: 4 }, 0.5);
+  const gusty = surf.windQualityFactor(beach, { windSpeed: 3, windDirection: beach.offshoreWind, windGusts: 30 }, 0.5);
+  assert.ok(gusty >= calm - 0.05, `glassy 3 km/h morning should survive a gust spike (${calm} vs ${gusty})`);
+
+  const windyCalm = surf.windQualityFactor(beach, { windSpeed: 20, windDirection: beach.offshoreWind, windGusts: 22 }, 0.5);
+  const windyGusty = surf.windQualityFactor(beach, { windSpeed: 20, windDirection: beach.offshoreWind, windGusts: 44 }, 0.5);
+  assert.ok(windyGusty < windyCalm, "a real wind with a big gust spread is still penalized");
+});
+
+test("a far-oversized short-period swell collapses to the closeout floor", () => {
+  seedForecasts();
+  const beach = surf.BEACHES.find((item) => item.id === "mocambique"); // maxHeight 3.2
+  const huge = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 5.5, period: 8 }), 0);
+  assert.ok(huge.detail.oversize <= 0.2, `oversize should hit the floor, got ${huge.detail.oversize}`);
+  assert.ok(huge.score < 38, `far-oversized closeout should read Poor, got ${huge.score}`);
+
+  // Period-aware onset: a long-period swell of the same height holds longer.
+  const long = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 3.4, period: 16 }), 0);
+  const short = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 3.4, period: 8 }), 0);
+  assert.ok(long.detail.oversize > short.detail.oversize, "long groundswell closes out later than short");
+});
+
+test("period quality reads the longer of the combined and swell-partition period", () => {
+  seedForecasts();
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const base = cleanAlignedSample(beach, { height: 1.3, period: 7 }); // combined 7 s
+  const hidden = { ...base, swellPeriod: 13 }; // a 13 s groundswell hidden under the blended sea
+  const blended = surf.scoreSample(beach, base, 0);
+  const groundswell = surf.scoreSample(beach, hidden, 0);
+  assert.ok(
+    groundswell.detail.periodFit > blended.detail.periodFit,
+    "a long swell-partition period must not be graded as short-period chop",
+  );
+});
+
+test("windsea aligned with the swell window contaminates less than opposed windsea", () => {
+  seedForecasts();
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const base = { ...cleanAlignedSample(beach, { height: 1.4, period: 12 }), windWaveHeight: 0.8, windWavePeriod: 6 };
+  const aligned = surf.scoreSample(beach, { ...base, windWaveDirection: beach.swellCenter }, 0);
+  const opposed = surf.scoreSample(beach, { ...base, windWaveDirection: (beach.swellCenter + 180) % 360 }, 0);
+  assert.ok(aligned.detail.cleanliness > opposed.detail.cleanliness, "aligned windsea reads cleaner");
+  assert.ok(aligned.score >= opposed.score, "aligned windsea never scores worse than opposed");
+});
+
+test("missing weather reads as neutral, not a flawless clear sky", () => {
+  seedForecasts();
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const sample = cleanAlignedSample(beach, { height: 1.2, period: 12 });
+  const missing = surf.scoreSample(beach, { ...sample, precipitationProbability: null, cloudCover: null }, 0);
+  assert.ok(missing.parts.weather < 100, `missing weather should not be perfect, got ${missing.parts.weather}`);
+  assert.ok(missing.parts.weather >= 60, `missing weather should be neutral-ish, got ${missing.parts.weather}`);
+});
+
+test("a sheltered bay caps swell power harder than an open beach on an off-window swell", () => {
+  seedForecasts();
+  const retainedOffWindow = (id) => {
+    const beach = surf.BEACHES.find((item) => item.id === id);
+    const inWindow = cleanAlignedSample(beach, { height: 1.6, period: 12 });
+    const off = (beach.swellCenter + 180) % 360;
+    const offWindow = { ...inWindow, swellDirection: off, waveDirection: off };
+    const inPower = surf.scoreSample(beach, inWindow, 0).parts.swell;
+    const offPower = surf.scoreSample(beach, offWindow, 0).parts.swell;
+    return offPower / inPower; // fraction of power kept on a bad angle
+  };
+  assert.ok(
+    retainedOffWindow("armacao") < retainedOffWindow("mocambique"),
+    "the filtered bay (Armacao) should keep less off-window power than the open magnet (Mocambique)",
+  );
+});
+
+test("scored-sample cache keys on the absolute date so it cannot go stale across midnight", () => {
+  seedForecasts();
+  surf.scoredSampleCache.clear();
+  const beach = surf.selectedBeach();
+  surf.getScoredSample(beach, 0, 8);
+  const today = surf.dateKey(0);
+  const keys = Array.from(surf.scoredSampleCache.keys());
+  assert.ok(keys.some((key) => key.includes(today)), `cache key should encode the resolved date ${today}, got ${keys[0]}`);
+});
+
+test("tideScore peaks at the ideal state, floors at the spread edge, and is neutral when missing", () => {
+  assert.ok(surf.tideScore(0.5, 0.5, 0.5) > 0.95);
+  assert.ok(surf.tideScore(0.5, 0.5, 0.5) > surf.tideScore(0.8, 0.5, 0.5));
+  assert.ok(Math.abs(surf.tideScore(1.0, 0.5, 0.5) - 0.3) < 1e-9, "diff >= spread floors at 0.3");
+  assert.equal(surf.tideScore(NaN, 0.5, 0.5), 0.6, "missing tide -> neutral 0.6");
+});
+
+test("coastalFitScore stays inside its 0..100 band for known and unknown spots", () => {
+  const known = surf.BEACHES.find((item) => item.id === "mocambique");
+  const value = surf.coastalFitScore(known, 0.5);
+  assert.ok(value >= 12 && value <= 100, `coastalFitScore out of band: ${value}`);
+  const unknown = surf.coastalFitScore({ id: "nope", exposure: "Open" }, 0.5);
+  assert.ok(unknown >= 12 && unknown <= 100, `unknown-spot coastalFitScore out of band: ${unknown}`);
+});
+
+test("surfable readiness rises monotonically from the floor to fully surfable", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const floor = surf.surfableHeightFloor(beach);
+  let prev = -Infinity;
+  for (let h = floor; h <= floor + 0.8 + 1e-9; h += 0.05) {
+    const readiness = surf.surfableHeightFactor(h, beach);
+    assert.ok(readiness >= prev - 1e-9, `readiness dipped at ${h.toFixed(2)} m`);
+    prev = readiness;
+  }
+  assert.ok(surf.surfableHeightFactor(floor + 1.0, beach) >= 0.999, "reaches 1.0 comfortably above the floor");
+});
+
+test("day overview describes a flat day without crashing in both languages", () => {
+  seedForecasts();
+  surf.BEACHES.forEach((beach) => {
+    const forecast = surf.state.forecasts.get(beach.id);
+    forecast.marine.wave_height = forecast.marine.wave_height.map(() => 0.2);
+    forecast.marine.swell_wave_height = forecast.marine.swell_wave_height.map(() => 0.15);
+  });
+  surf.scoredSampleCache.clear();
+
+  for (const lang of ["pt", "en"]) {
+    surf.state.lang = lang;
+    const day = surf.describeDay(0);
+    assert.ok(day && typeof day.text === "string");
+    assert.ok(!day.text.includes("undefined"));
+    assert.ok(day.peakScore < 45, `flat day should peak low, got ${day.peakScore}`);
+  }
+  surf.state.lang = "pt";
+});
+
+test("a clean-fun rescued day's one-liner credits the clean call, not swell as the problem", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const scored = { beach, sample: matadeiroCleanMorning, score: surf.scoreSample(beach, matadeiroCleanMorning, 0) };
+  surf.state.lang = "en";
+  const read = surf.compactSessionRead(scored);
+  surf.state.lang = "pt";
+  assert.ok(/clean and glassy/.test(read), `expected the clean-fun read, got "${read}"`);
+  assert.ok(!/swell/i.test(read.slice(read.indexOf(":") + 1)), "must not blame swell on a rescued day");
+});
+
+test("confidence chip blends forecast horizon with per-spot data confidence", () => {
+  seedForecasts();
+  const beach = surf.selectedBeach();
+  surf.state.lang = "en";
+  const today = surf.confidenceMeta({ score: surf.scoreSample(beach, cleanAlignedSample(beach, { height: 1.3, period: 12 }), 0) });
+  const far = surf.confidenceMeta({ score: surf.scoreSample(beach, cleanAlignedSample(beach, { height: 1.3, period: 12 }), 3) });
+  surf.state.lang = "pt";
+  const tierRank = { high: 3, mid: 2, low: 1 };
+  assert.ok(tierRank[today.tier] >= tierRank[far.tier], "a nearer forecast is at least as confident as a far one");
+  assert.ok(/confidence/i.test(today.text), "chip carries a human-readable label");
+});
+
+test("compass labels wrap around negative and out-of-range degrees", () => {
+  surf.state.lang = "en";
+  for (const deg of [-10, 350, 360, 720, 725]) {
+    assert.equal(surf.degToCompass(deg), "N", `${deg} should normalize to N`);
+  }
+  assert.equal(surf.degToCompass(45), "NE");
+  surf.state.lang = "pt";
+});
+
+test("radar frame matching is inclusive exactly at the tolerance boundary", () => {
+  const frames = [{ time: 1_000, path: "/v2/radar/a" }];
+  assert.equal(surf.findClosestRadarFrameIndex(frames, 1_000 + 600, 10), 0, "exactly 10 min still matches");
+  assert.equal(surf.findClosestRadarFrameIndex(frames, 1_000 + 601, 10), -1, "one second past does not");
+});
+
+test("numericCell rejects non-finite values and coerces clean numeric strings", () => {
+  assert.equal(surf.numericCell(null), null);
+  assert.equal(surf.numericCell(undefined), null);
+  assert.equal(surf.numericCell(""), null);
+  assert.equal(surf.numericCell("   "), null);
+  assert.equal(surf.numericCell("1.5"), 1.5);
+  assert.equal(surf.numericCell(" 9 "), 9);
+  assert.equal(surf.numericCell(Number.NaN), null);
+  assert.equal(surf.numericCell(Number.POSITIVE_INFINITY), null);
 });

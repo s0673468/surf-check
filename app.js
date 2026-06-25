@@ -413,9 +413,15 @@ const UI = {
     gust: "rajada",
     noForecastHour: "Sem previsão para esta praia neste horário.",
     noForecastWindow: "Ainda sem previsão para este dia e horário.",
-    errorState: "Previsão indisponível agora. Tente atualizar em um minuto.",
+    errorState: "Previsão indisponível agora.",
+    retry: "Tentar de novo",
+    confHigh: "Confiança alta",
+    confMid: "Confiança média",
+    confLow: "Confiança baixa",
     loadingBeaches: "Carregando praias",
     loadingWindow: "Carregando o dia",
+    docTitle: "Surfe em Floripa",
+    metaDescription: "Como o surfe está se formando nas praias de Florianópolis.",
     footer:
       "Previsão do Open-Meteo · pontuação heurística — não substitui dar uma olhada no mar de verdade.",
   },
@@ -457,9 +463,15 @@ const UI = {
     gust: "gust",
     noForecastHour: "No forecast for this beach and hour.",
     noForecastWindow: "No forecast for this day and hour yet.",
-    errorState: "Forecast data is unavailable right now. Try refreshing in a minute.",
+    errorState: "Forecast data is unavailable right now.",
+    retry: "Try again",
+    confHigh: "High confidence",
+    confMid: "Medium confidence",
+    confLow: "Low confidence",
     loadingBeaches: "Loading beaches",
     loadingWindow: "Loading day window",
+    docTitle: "Surf check · Floripa",
+    metaDescription: "How the surf is shaping up across the beaches of Florianópolis.",
     footer:
       "Forecast from Open-Meteo · heuristic scoring, not a substitute for a real look at the beach.",
   },
@@ -633,11 +645,49 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMap();
   renderLoading();
   loadForecasts();
+  installSessionRefresh();
 });
+
+// Recover a long-open session. loadForecasts only runs at startup, so a tab left
+// open for hours shows a frozen snapshot and — worse — rolls its day labels past
+// local midnight while serving the prior day's data. Refetch (which also clears
+// the scored-sample cache) when the tab regains focus or the network returns, if
+// the local date has rolled over or the snapshot is stale (>30 min).
+function installSessionRefresh() {
+  let loadedDate = dateKey(0);
+  const STALE_MS = 30 * 60 * 1000;
+  const refreshIfStale = () => {
+    if (state.loading) return;
+    const today = dateKey(0);
+    const dateRolled = today !== loadedDate;
+    const aged = state.lastUpdated && Date.now() - state.lastUpdated.getTime() > STALE_MS;
+    if (dateRolled || aged || !state.loadedCount) {
+      loadedDate = today;
+      loadForecasts();
+      loadRadarFrames();
+    }
+  };
+  if (document.addEventListener) {
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshIfStale();
+    });
+  }
+  if (window.addEventListener) {
+    window.addEventListener("online", () => loadForecasts());
+    window.addEventListener("focus", refreshIfStale);
+  }
+}
 
 // Updates the static page chrome (title, headings, control labels, footer,
 // language toggle state) that lives outside the data-driven render() pass.
 function syncStaticChrome() {
+  // The HTML ships PT as the no-JS default; sync the tab title + meta description
+  // to the active language so an EN visitor (and their bookmarks/link previews)
+  // don't see Portuguese in the chrome.
+  document.title = t("docTitle");
+  const metaDescription = document.querySelector('meta[name="description"]');
+  if (metaDescription) metaDescription.setAttribute("content", t("metaDescription"));
+
   const h1 = document.querySelector(".brand h1");
   if (h1) h1.textContent = t("h1");
 
@@ -717,7 +767,9 @@ function renderControls() {
     state.selectedHour = Number(slider.value);
     if (output) output.textContent = formatHour(state.selectedHour); // instant readout
     slider.setAttribute("aria-valuetext", `${String(state.selectedHour).padStart(2, "0")}:00`);
-    renderData(); // skip renderControls so the slider survives the drag
+    // Coalesce the heavier panel/marker rebuild to one paint per frame so a fast
+    // drag stays smooth (the instant readout above already gives live feedback).
+    scheduleRenderData();
   });
 
   const nowButton = elements.hourControls.querySelector("[data-now]");
@@ -731,7 +783,7 @@ function renderControls() {
 }
 
 function initializeMap() {
-  if (!window.L) {
+  if (!window.L || window.__leafletFailed) {
     initializeFallbackMap();
     return;
   }
@@ -849,6 +901,21 @@ function render() {
   renderData();
 }
 
+// Coalesce rapid renderData calls (hour-slider drag) into one per animation frame.
+let renderDataScheduled = false;
+function scheduleRenderData() {
+  const raf =
+    typeof window !== "undefined" && window.requestAnimationFrame
+      ? window.requestAnimationFrame.bind(window)
+      : (cb) => cb();
+  if (renderDataScheduled) return;
+  renderDataScheduled = true;
+  raf(() => {
+    renderDataScheduled = false;
+    renderData();
+  });
+}
+
 // Everything that reacts to the selected day/hour/beach, WITHOUT rebuilding the
 // controls — so dragging the hour slider stays smooth (the slider element is not
 // torn down mid-drag). Scoring is memoized, so this stays cheap to call live.
@@ -888,7 +955,13 @@ function renderLoading() {
 }
 
 function renderError() {
-  elements.rankedList.innerHTML = `<div class="empty-state" role="alert">${escapeHtml(t("errorState"))}</div>`;
+  elements.rankedList.innerHTML = `
+    <div class="empty-state" role="alert">
+      <span>${escapeHtml(t("errorState"))}</span>
+      <button type="button" class="retry-btn" data-retry>${escapeHtml(t("retry"))}</button>
+    </div>`;
+  const retry = elements.rankedList.querySelector("[data-retry]");
+  if (retry) retry.addEventListener("click", () => loadForecasts());
   elements.selectedSummary.innerHTML = "";
   elements.metricGrid.innerHTML = "";
   elements.timelinePanel.innerHTML = "";
@@ -913,13 +986,19 @@ function updateMarkers(view = getForecastView()) {
     const marker = state.markers.get(beach.id);
     const scored = view.scoredByBeachId.get(beach.id);
     const score = scored?.score?.score;
+    const label = Number.isFinite(score) ? String(Math.round(score)) : "--";
 
     if (state.map && marker?.setIcon) {
-      marker.setIcon(makeMarkerIcon(score));
+      // Only rebuild the divIcon when the rounded label (and thus the tier)
+      // actually changed — a slider drag otherwise mints 11 fresh icons per step.
+      if (marker.__label !== label) {
+        marker.setIcon(makeMarkerIcon(score));
+        marker.__label = label;
+      }
       marker.setZIndexOffset(beach.id === state.selectedBeachId ? 1000 : 0);
     } else if (marker) {
       marker.className = `fallback-pin map-pin ${pinClass(score)}`;
-      marker.textContent = Number.isFinite(score) ? String(Math.round(score)) : "--";
+      marker.textContent = label;
     }
   }
 }
@@ -936,12 +1015,14 @@ function renderSelectedSummary(view = getForecastView()) {
 
   const score = scored.score;
   const badgeClass = pinClass(score.score);
+  const conf = confidenceMeta(scored);
   elements.selectedSummary.innerHTML = `
     <span class="panel-eyebrow">${escapeHtml(t("selectedSpot"))}</span>
     <div class="summary-top">
       <div>
         <h2 class="beach-name">${escapeHtml(beach.name)}</h2>
         <p class="beach-meta">${escapeHtml(formatDayHour(view.dayOffset, view.hour))} · ${escapeHtml(tBeach(beach, "breakType"))}</p>
+        <span class="confidence-chip conf-${conf.tier}" title="${escapeHtml(conf.title)}">${escapeHtml(conf.text)}</span>
       </div>
       <div class="score-badge ${badgeClass}">
         <span class="score-number">${score.score}</span>
@@ -1168,6 +1249,14 @@ function compactSessionRead(scored) {
     return state.lang === "pt"
       ? `${scored.score.label}: ${reads[support.key]}. Fique de olho: ${limiting.label}.`
       : `${scored.score.label}: ${reads[support.key]}. Watch ${limiting.label}.`;
+  }
+  // A clean-fun rescued day scores well DESPITE low swell power, so the raw
+  // limiting factor (always swell on these days) would contradict the call.
+  // Surface the clean-fun read instead so the one-liner matches the score.
+  if ((scored.score.detail?.cleanFun ?? 0) >= 0.1) {
+    return state.lang === "pt"
+      ? `${scored.score.label}: pequeno mas limpo e glassy — vale a remada.`
+      : `${scored.score.label}: small but clean and glassy — worth the paddle.`;
   }
   return `${scored.score.label}: ${reads[limiting.key]}.`;
 }
@@ -1867,6 +1956,22 @@ function partTone(value) {
   if (value >= 76) return "good";
   if (value >= 52) return "watch";
   return "poor";
+}
+
+// How much to trust this read, blending forecast HORIZON confidence (further-out
+// days are softer) with the spot's source DATA confidence (places like Brava and
+// Matadeiro rest on thin/contested priors — see docs/spot-research.md). Surfaced
+// as a small chip so a low-confidence spot reads as an estimate, not a measurement.
+function confidenceMeta(scored) {
+  const horizon = clamp((scored.score.confidence ?? 60) / 100, 0, 1);
+  const data = clamp(scored.score.detail?.dataConfidence ?? 0.5, 0, 1);
+  const combined = clamp(horizon * (0.65 + 0.35 * data), 0, 1);
+  const pct = Math.round(combined * 100);
+  const pt = state.lang === "pt";
+  const title = pt ? `Confiança ~${pct}% (horizonte + dados do pico)` : `~${pct}% confidence (horizon + spot data)`;
+  if (combined >= 0.72) return { tier: "high", text: t("confHigh"), title };
+  if (combined >= 0.5) return { tier: "mid", text: t("confMid"), title };
+  return { tier: "low", text: t("confLow"), title };
 }
 
 function compassWindow(center, spread) {

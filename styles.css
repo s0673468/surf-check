@@ -1024,6 +1024,46 @@ h1 {
   margin: 0;
 }
 
+.confidence-chip {
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-top: 0.5rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  color: var(--fg2);
+}
+
+.confidence-chip::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.confidence-chip.conf-high {
+  color: var(--score-good);
+  border-color: color-mix(in srgb, var(--score-good) 40%, transparent);
+  background: color-mix(in srgb, var(--score-good) 12%, transparent);
+}
+
+.confidence-chip.conf-mid {
+  color: var(--score-fair);
+  border-color: color-mix(in srgb, var(--score-fair) 38%, transparent);
+  background: color-mix(in srgb, var(--score-fair) 12%, transparent);
+}
+
+.confidence-chip.conf-low {
+  color: var(--score-poor);
+  border-color: color-mix(in srgb, var(--score-poor) 40%, transparent);
+  background: color-mix(in srgb, var(--score-poor) 12%, transparent);
+}
+
 .score-badge {
   align-items: center;
   border-radius: var(--radius-panel);
@@ -1372,12 +1412,30 @@ h1 {
   align-items: center;
   color: var(--fg3);
   display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
   font-weight: 600;
   justify-content: center;
   line-height: 1.4;
   min-height: 160px;
   padding: var(--space-md);
   text-align: center;
+}
+
+.retry-btn {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 1.1rem;
+}
+
+.retry-btn:hover {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 /* ---------- Responsive ---------- */
