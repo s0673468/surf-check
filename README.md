@@ -29,11 +29,12 @@ Then visit `http://localhost:4173`.
 Validate the static app with the same gates CI runs:
 
 ```bash
-node --check app.js   # CI syntax-checks all five runtime scripts
-npm test
+make lint    # syntax-check all five runtime scripts
+make test    # run the smoke suite
+make check   # run both gates; CI uses this
 ```
 
-`npm test` runs the no-dependency smoke suite (55 tests). These cover the scoring model
+`make test` runs the no-dependency smoke suite (55 tests). These cover the scoring model
 directly — wind monotonicity across **both** speed and the offshore→onshore angle (no
 glassy cliff, no cross-shore jump), the gust gate that spares a glassy morning, the
 surfable-floor continuity and above-floor readiness ramp, size separation, the
