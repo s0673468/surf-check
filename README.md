@@ -29,15 +29,19 @@ Then visit `http://localhost:4173`.
 Validate the static app with the same gates CI runs:
 
 ```bash
-node --check app.js
+node --check app.js   # CI syntax-checks all five runtime scripts
 npm test
 ```
 
-`npm test` runs the no-dependency smoke suite. These cover the scoring model directly —
-wind monotonicity (no glassy cliff), surfable-floor continuity, size separation,
-period-aware closeout, cross-beach differentiation by exposure and angle, the normalized
-tide state, and the timezone epoch. The suite loads the same classic scripts as
-`index.html`, in page order, so split-file script ordering stays covered.
+`npm test` runs the no-dependency smoke suite (55 tests). These cover the scoring model
+directly — wind monotonicity across **both** speed and the offshore→onshore angle (no
+glassy cliff, no cross-shore jump), the gust gate that spares a glassy morning, the
+surfable-floor continuity and above-floor readiness ramp, size separation, the
+period-aware closeout floor, exposure-class direction capping, aligned-vs-opposed windsea
+cleanliness, missing-weather neutrality, the normalized tide state, the date-keyed scored
+cache (no midnight staleness), and the timezone epoch — plus the radar, fetch-resilience,
+localization, and prose helpers. The suite loads the same classic scripts as `index.html`,
+in page order, so split-file script ordering stays covered.
 
 ## Runtime structure
 
@@ -65,8 +69,10 @@ The app deliberately stays as classic scripts with no bundler:
 - **Best bets** — beaches ranked for the selected day/hour, with the top pick highlighted.
 - **Map** — the same scores as colored pins around the island (Leaflet + OpenStreetMap),
   plus a RainViewer rain layer when radar data exists for the selected surf hour.
-- **Selected spot** — score, a plain-language read, key metrics (swell / wind / tide /
-  weather), an hour-by-hour timeline, and the closest spots for comparison.
+- **Selected spot** — score, a **confidence chip** (forecast horizon blended with the
+  spot's source-data confidence, so a thin-data break like Brava reads as an estimate), a
+  plain-language read, key metrics (swell / wind / tide / weather), an hour-by-hour
+  timeline, and the closest spots for comparison.
 
 ## Design
 
@@ -109,24 +115,32 @@ so the power model never double-counts. The implementation lives in `score-model
 2. **Period — quality multiplier.** `periodCurve` is a smooth curve. Short clean swell
    (5–7 s — the bread and butter of small fun beachbreak here) keeps real value (floor
    `0.55`) rather than being written off; solid groundswell (10–12 s) scores near-full and
-   premium long period (15 s+) tops out. The windsea *mess* is docked by cleanliness, not
+   premium long period (15 s+) tops out. The period fed to the curve (and to the shoaling
+   in `breakingHeight`) is the **longer of the combined and swell-partition periods**, so a
+   clean long-period groundswell hidden under short windsea isn't graded as chop — while
+   *size* still reads the combined sea. The windsea *mess* is docked by cleanliness, not
    here, so period only measures swell quality. Period multiplies size; it is *not* also
    folded into the size term.
 3. **Cleanliness, direction, closeout.** A **windsea-contamination** penalty cuts quality
    when the wind-wave partition is large (computed from the swell *partition* energy, so
-   sizing on the combined sea never launders chop into free size); **swell direction**
-   modulates against each beach's window (`directionWindowScore`, where the configured
-   `swellSpread` is the real window); a **period-aware closeout** penalty bites smoothly
-   once the swell overpowers the beach (long groundswell holds bigger than short windsea).
+   sizing on the combined sea never launders chop into free size) — and windsea running
+   *with* the swell window contaminates **less** than opposed chop (`wind_wave_direction`);
+   **swell direction** modulates against each beach's window (`directionWindowScore`, where
+   the configured `swellSpread` is the real window) with an **exposure-class floor** so a
+   sheltered/filtered bay caps harder on a bad angle than an open swell magnet; a
+   **period-aware closeout** penalty bites smoothly once the swell overpowers the beach
+   (long groundswell holds bigger than short windsea).
 4. **Surfable floor.** Below a per-spot rideable floor (`DEFAULT_MIN_SURF_HEIGHT`, e.g.
    `minSurfHeight` 0.7 m for Ingleses) the size curve falls off continuously — no cliff at
    the boundary — so `0.5 m @ 16 s` reads Poor even though it's clean.
 5. **Wind — multiplicative gate.** Clean-swell potential is multiplied by a wind factor
-   (`windQualityFactor`): glassy is good, clean **light offshore is ideal** (and never
-   scores below glassy — the old 4 km/h cliff is gone), **cross-shore** adds chop,
-   **onshore** degrades from the ~13 km/h whitecap threshold, **bigger swell shrugs wind
-   off**, and gusts / very strong wind from any quarter taper it toward zero (only *real*
-   gust spread, beyond ~8 km/h, counts — a glassy morning with the odd puff stays glassy).
+   (`windQualityFactor`): a glassy surface sits at a ~0.9 baseline from **any** direction,
+   clean **light offshore is ideal** (grooms toward 1.0; the old 4 km/h cliff is gone),
+   then the factor degrades **monotonically** as the wind turns onshore — **cross-shore**
+   is texture, **dead onshore** is the worst (the old branch split that jumped ~0.1 at the
+   cross-shore seam and rated dead-onshore above oblique is fixed). **Bigger swell shrugs
+   wind off**, and gusts / very strong wind taper it toward zero — but the gust penalty is
+   **gated by base speed**, so a glassy morning with a spurious gust spike stays glassy.
    A great swell blown out by strong onshore collapses to Poor.
 6. **Context (gated).** Coastal depth fit, **tide**, and weather contribute a small amount
    *gated by the core* so they can't lift a flat or blown-out hour — but a calm-clean-
@@ -134,7 +148,7 @@ so the power model never double-counts. The implementation lives in `score-model
    actually nice out). Tide is compared as a normalized **low/mid/high state** within the
    day's local range, not as absolute metres (Open-Meteo's `sea_level_height_msl` is
    referenced to the global datum and carries a surge residual, so absolute height isn't a
-   reliable tide phase).
+   reliable tide phase). Missing weather reads as **neutral**, not a flawless clear sky.
 7. **Clean-fun (the one composite).** A pure power engine buries small days: a rideable,
    clean, glassy, in-window day with little power scores ~Poor even when it's a genuinely
    good call to paddle out (the kind of fine small Matadeiro morning that draws a crowd).

@@ -39,11 +39,13 @@ function waveEnergy(height, period) {
 }
 
 // Deep-water swell shoals into a taller breaker the longer its period (energy
-// focuses as the wave feels bottom). A gentle +/-~10% across the realistic band.
+// focuses as the wave feels bottom). The 0.4 exponent gives a meaningful
+// ~+/-18% across the realistic 6-16 s band so genuine long-period groundswell
+// reads taller than short windswell of the same deep-water height.
 function breakingHeight(height, period) {
   if (!Number.isFinite(height) || height <= 0) return 0;
   const t = Number.isFinite(period) && period > 0 ? period : 9;
-  return height * clamp((t / 11) ** 0.25, 0.82, 1.18);
+  return height * clamp((t / 11) ** 0.4, 0.82, 1.18);
 }
 
 function shelterAttenuation(beach) {
@@ -63,11 +65,20 @@ function shelterAttenuation(beach) {
 // its clean-swell energy reads the swell partition (see scoreSample), so wind-chop
 // still enters as dirt, not as free size.
 function effHeight(sample) {
-  return Math.max(sample.waveHeight ?? 0, sample.swellHeight ?? 0) || (sample.swellHeight ?? sample.waveHeight);
+  const candidates = [sample.waveHeight, sample.swellHeight].filter(Number.isFinite);
+  return candidates.length ? Math.max(...candidates) : null;
 }
 
+// Period for SHOALING and the period-quality multiplier. We size on the
+// combined sea (effHeight), but the combined wave_period is blended DOWN by any
+// windsea, so a clean long-period groundswell hidden under short chop would be
+// graded as chop. Take the longer of the combined and swell-partition periods
+// so that hidden groundswell keeps its quality. (Height stays the combined sea.)
 function effPeriod(sample) {
-  return sample.wavePeriod ?? sample.swellPeriod;
+  const wave = sample.wavePeriod;
+  const swell = sample.swellPeriod;
+  if (Number.isFinite(wave) && Number.isFinite(swell)) return Math.max(wave, swell);
+  return wave ?? swell;
 }
 
 function effDir(sample) {
@@ -137,41 +148,45 @@ function surfableHeightFactor(height, beach) {
   return clamp(0.9 + 0.1 * ratio ** 0.75, 0.9, 1);
 }
 
-// Multiplicative wind gate (0..1). Glassy is good and clean light-offshore is
-// ideal (and never scores below glassy); cross-shore adds chop; onshore degrades
-// from the ~13 km/h whitecap threshold; bigger swell shrugs wind off; gusts and
-// very strong wind from any quarter taper it toward zero. Continuous throughout.
+// Multiplicative wind gate (0..1). A glassy surface sits at a ~0.9 baseline from
+// ANY direction; clean light offshore grooms it up toward 1.0; turning onshore
+// degrades it MONOTONICALLY (cross-shore is texture, dead onshore is blown);
+// bigger swell shrugs wind off; gusts and very strong wind from any quarter
+// taper it toward zero. The degradation is built from `onshoreness` (a single
+// quantity monotone in the offshore->onshore angle) so the factor is continuous
+// and non-increasing as the wind rotates onshore at any fixed speed - the old
+// branch split rated a dead-cross / slightly-onshore wind ABOVE a slightly-
+// offshore one (a ~0.1 jump at 90 deg) and let dead-onshore beat oblique onshore.
 function windQualityFactor(beach, sample, sizeMag = 0.5) {
   const speed = sample.windSpeed;
   const gusts = sample.windGusts;
   if (!Number.isFinite(speed) || speed <= 0) return 0.9;
 
   const off = angularDiff(sample.windDirection, beach.offshoreWind); // 0 offshore .. 180 onshore
-  const rad = (off * Math.PI) / 180;
-  const dirComp = Math.cos(rad); // +1 offshore .. -1 onshore
-  const crossComp = Math.abs(Math.sin(rad)); // 0 aligned .. 1 dead cross
+  const dirComp = Math.cos((off * Math.PI) / 180); // +1 offshore .. -1 onshore
+  const onshoreness = (1 - dirComp) / 2; // 0 offshore .. 0.5 cross .. 1 onshore (monotone in off)
+  const offshoreness = Math.max(0, dirComp); // 0..1 over the offshore half
   const sizeShield = clamp(1 - 0.4 * sizeMag, 0.6, 1); // bigger swell resists wind
-  const dirWeight = smoothstep(speed, 0, 6); // wind angle barely matters when near-calm
+  const dirWeight = smoothstep(speed, 2, 10); // wind angle is irrelevant when near-calm
 
-  let factor;
-  if (dirComp >= 0) {
-    // Offshore-ish: base 0.9, building to 1.0 with clean light offshore.
-    factor = 0.9 + 0.1 * dirComp * smoothstep(speed, 0, 10);
-    factor -= dirWeight * dirComp * clamp((speed - 32) / 60, 0, 0.28); // strong offshore over-holds faces
-  } else {
-    const onshore = -dirComp; // 0..1
-    const severity = clamp((speed - 11) / 24, 0, 1) ** 1.3; // whitecaps ~13+, blown by ~35
-    factor = 1 - dirWeight * onshore * (0.28 + 0.72 * severity) * sizeShield;
-  }
+  // Clean light offshore is the prize: a 0.9 glassy baseline grooms up to 1.0.
+  const groom = 0.1 * offshoreness * smoothstep(speed, 0, 10);
 
-  // Cross-shore chop bites even when nominally offshore.
-  factor -= crossComp * clamp((speed - 13) / 32, 0, 1) * 0.32 * sizeShield;
+  // Degradation grows monotonically as the wind turns onshore. Whitecaps build
+  // from ~12 km/h; dead onshore bites the full penalty, cross-shore half of it.
+  const severity = clamp((speed - 11) / 24, 0, 1) ** 1.3; // whitecaps ~13+, blown by ~35
+  let factor = 0.9 + groom - dirWeight * onshoreness * (0.32 + 0.7 * severity) * sizeShield;
 
-  // Gustiness only chops the face once the spread is real - a glassy 2 km/h
-  // morning with the odd 9 km/h puff is still glassy, so the first ~8 km/h of
-  // spread is free before the penalty bites.
+  // Strong offshore over-holds the face (late drops, double-ups). Only on the
+  // offshore half and only past ~32 km/h, so it never breaks onshore monotonicity.
+  factor -= dirWeight * offshoreness * clamp((speed - 32) / 60, 0, 0.28);
+
+  // Gusts only chop the face once the spread is real AND there is a sustained
+  // base wind - a glassy 2 km/h morning with the odd 9 km/h puff stays glassy, so
+  // the penalty is gated by base speed (no spurious demotion of a dawn glassoff)
+  // and the first ~8 km/h of spread is free.
   const gustSpread = Math.max(0, (Number.isFinite(gusts) ? gusts : speed) - speed);
-  factor *= clamp(1 - Math.max(0, gustSpread - 8) / 40, 0.4, 1);
+  factor *= 1 - smoothstep(speed, 3, 10) * clamp(Math.max(0, gustSpread - 8) / 40, 0, 0.6);
   factor *= clamp(1 - Math.max(0, speed - 35) / 45, 0.06, 1); // strong wind, any direction
 
   return clamp(factor, 0.03, 1);
@@ -181,8 +196,10 @@ function scoreSample(beach, sample, dayOffset) {
   const swellHeight = effHeight(sample) ?? 0;
   const swellPeriod = effPeriod(sample) ?? 0;
   const swellDirection = effDir(sample);
-  const rain = sample.precipitationProbability ?? 0;
-  const cloud = sample.cloudCover ?? 0;
+  const rainKnown = Number.isFinite(sample.precipitationProbability);
+  const cloudKnown = Number.isFinite(sample.cloudCover);
+  const rain = rainKnown ? sample.precipitationProbability : 0;
+  const cloud = cloudKnown ? sample.cloudCover : 0;
 
   // Clean-swell energy = primary + the secondary swell weighted by its OWN period
   // and direction quality (a long-period in-window secondary is real rideable
@@ -194,11 +211,18 @@ function scoreSample(beach, sample, dayOffset) {
   const secondaryWeight = clamp(
     periodCurve(sample.secondarySwellPeriod) *
       directionWindowScore(sample.secondarySwellDirection, beach.swellCenter, beach.swellSpread),
-    0.15,
+    0.05, // a junk off-window short secondary earns almost nothing, not a guaranteed 15%
     0.85,
   );
   const eSecondary = secondaryWeight * eSecondaryRaw;
-  const eWind = waveEnergy(sample.windWaveHeight, sample.windWavePeriod);
+  // Wind-wave = contamination, but windsea running WITH the swell (in the beach's
+  // window) stacks into rideable size more than it dirties the face. Discount its
+  // contamination by how aligned it is - only when we actually know its direction
+  // (unknown => treat as full chop, no free pass).
+  const windWaveAlignment = Number.isFinite(sample.windWaveDirection)
+    ? directionWindowScore(sample.windWaveDirection, beach.swellCenter, beach.swellSpread)
+    : 0;
+  const eWind = waveEnergy(sample.windWaveHeight, sample.windWavePeriod) * (1 - 0.5 * windWaveAlignment);
   const eSwell = ePrimary + eSecondary;
 
   // Size from the shelter-attenuated breaking height (one size scale everywhere).
@@ -223,7 +247,15 @@ function scoreSample(beach, sample, dayOffset) {
 
   const swellQuality = clamp(sizeMag * periodFit * cleanliness * oversize * sizeReadiness, 0, 1);
   const directionFit = directionWindowScore(swellDirection, beach.swellCenter, beach.swellSpread);
-  const potential = swellQuality * (0.45 + 0.55 * directionFit); // direction modulates, never zeroes
+  // Direction modulates but never zeroes the power core. The floor is exposure-
+  // class dependent: open swell magnets keep ~0.45 of their power on an off-window
+  // swell (they still get SOMETHING), but sheltered/filtered bays cap harder
+  // (~0.25) because a bad angle is a real wall there - the open-water height
+  // overstates what wraps in. (See docs/spot-research.md: tighten the angle gate
+  // by exposure class.)
+  const shelter = clamp(spotDataProfile(beach).shelterIndex ?? 0.35, 0, 1);
+  const dirFloor = 0.45 - 0.22 * shelter; // ~0.45 open .. ~0.29 sheltered
+  const potential = swellQuality * (dirFloor + (1 - dirFloor) * directionFit);
 
   // Wind multiplies the clean-swell potential; a blown-out day keeps little of
   // it (wind weighs heavier than the old 0.18/0.82 split - glassy is the prize).
@@ -245,7 +277,10 @@ function scoreSample(beach, sample, dayOffset) {
   // through (good tide and a clear sky DO matter when it is actually nice out).
   const tideFit = tideScore(sample.tideState, beach.idealTide, beach.tideSpread);
   const coastalFit = coastalFitScore(beach, sizeMag) / 100;
-  const weatherFit = clamp(1 - rain / 170 - cloud / 500, 0.18, 1);
+  // Missing rain AND cloud reads as neutral (~0.7), not a flawless clear sky, so
+  // a weather-data gap can't masquerade as perfect conditions.
+  const weatherFit =
+    rainKnown || cloudKnown ? clamp(1 - rain / 170 - cloud / 500, 0.18, 1) : 0.7;
   const context = 0.55 * coastalFit + 0.28 * tideFit + 0.17 * weatherFit;
   const coreGate = clamp(smoothstep(core, 0.08, 0.5) + 0.9 * calmCleanRideable, 0, 1);
   const baseScore = 0.85 * core + 0.15 * context * coreGate;
@@ -294,6 +329,7 @@ function scoreSample(beach, sample, dayOffset) {
       oversize,
       cleanFun,
       minSurfHeight: surfableHeightFloor(beach),
+      dataConfidence: clamp(spotDataProfile(beach).dataConfidence ?? 0.5, 0, 1),
     },
     windQuality,
     tideTrend,
@@ -402,11 +438,11 @@ function directionWindowScore(direction, center, spread) {
 // We compare a daily-normalized state, not absolute MSL metres: Open-Meteo's
 // sea_level_height_msl is referenced to the global datum and carries a
 // surge/pressure residual, so absolute height is not a reliable tide phase.
-function tideScore(state, ideal, spread) {
-  if (!Number.isFinite(state) || !Number.isFinite(ideal) || !Number.isFinite(spread) || spread <= 0) {
+function tideScore(tideState, ideal, spread) {
+  if (!Number.isFinite(tideState) || !Number.isFinite(ideal) || !Number.isFinite(spread) || spread <= 0) {
     return 0.6;
   }
-  const diff = Math.abs(state - ideal);
+  const diff = Math.abs(tideState - ideal);
   if (diff >= spread) return 0.3;
   return clamp(1 - (diff / spread) ** 1.4, 0.3, 1);
 }
