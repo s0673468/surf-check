@@ -9,6 +9,29 @@ Agent-facing operating notes for this repo.
 - Keep runtime assumptions simple enough to work from a local file or a basic
   static server.
 
+
+## Shared Agent Policy
+
+- Favor autonomy: when a low-risk docs, tests, typing, lint, or small behavior
+  fix is clearly useful and locally reviewable, make the change, run the
+  relevant local gate, open a ready PR, and babysit required CI without pausing
+  for permission.
+- Pause and ask before destructive data changes, private-data publication,
+  credential or access changes, force-pushes, broad product direction shifts, or
+  workflow/deploy/scheduled-job changes that need external approval.
+- For non-trivial repo changes, use a normal ready PR. Use draft only when the
+  work is intentionally incomplete.
+- Request extra Codex review only for high-risk changes: data sync, ingestion,
+  freshness, provenance, migrations, schema/storage, auth/secrets,
+  CI/deploy/public access, launchd/cron/scheduled/background automation, mobile
+  offline/cache/startup/headless/notifications, broad refactors/shared
+  contracts, or private-data/public-artifact exposure.
+- Treat review comments as triage findings: P1/P2 findings must be fixed or
+  explicitly dismissed with evidence before merge. Low-risk PRs with green CI
+  can merge without extra review.
+- After local validation, green required checks, and resolved high-risk findings,
+  squash-merge ready PRs.
+
 ## Working Rules
 
 - Prefer direct simplification over new abstractions.
@@ -61,6 +84,13 @@ make check   # run both gates; CI uses this
   For syntax-only confidence on a touched split file, also run `node --check <file>`.
 - Do not add snapshot churn or DOM-heavy test scaffolding for logic that can be
   tested directly through the exported runtime helpers.
+
+
+## Generated Local State
+
+- Preserve `.understand-anything/` and similar local graph or analysis outputs.
+  They are user-owned working state. Report them as generated/local if noisy,
+  but do not delete or commit them unless explicitly requested.
 
 ## Docs
 
