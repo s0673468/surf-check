@@ -6,6 +6,8 @@ are the best bets, and tap one for a plain-language detail view.
 
 Pure HTML/CSS/JS, no build step, no API keys.
 
+Canonical GitHub repo: `s0673468/surf-check`; default branch: `master`.
+
 > **Surf a different coast?** The engine is region-agnostic — the location lives
 > entirely in config. See [`docs/fork-your-own-coast.md`](docs/fork-your-own-coast.md)
 > to point it at your own beaches in six small edits.
@@ -30,6 +32,7 @@ Validate the static app with the same gates CI runs:
 
 ```bash
 make lint    # syntax-check all five runtime scripts
+make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
 make check   # run both gates; CI uses this
 ```
