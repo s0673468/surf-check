@@ -5,6 +5,7 @@ Agent-facing operating notes for this repo.
 ## Scope
 
 - `Surf` is a static browser app: plain HTML, CSS, and JavaScript.
+- Canonical GitHub repo: `s0673468/surf-check`; default branch: `master`.
 - There is no build step, backend, auth flow, or secret material here.
 - Keep runtime assumptions simple enough to work from a local file or a basic
   static server.
@@ -67,6 +68,7 @@ Agent-facing operating notes for this repo.
 
 ```bash
 make lint    # syntax-check all five runtime scripts
+make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
 make check   # run both gates; CI uses this
 ```
