@@ -37,7 +37,7 @@ make test    # run the smoke suite
 make check   # run both gates; CI uses this
 ```
 
-`make test` runs the no-dependency smoke suite (55 tests). These cover the scoring model
+`make test` runs the no-dependency smoke suite (56 tests). These cover the scoring model
 directly — wind monotonicity across **both** speed and the offshore→onshore angle (no
 glassy cliff, no cross-shore jump), the gust gate that spares a glassy morning, the
 surfable-floor continuity and above-floor readiness ramp, size separation, the
@@ -80,9 +80,9 @@ The app deliberately stays as classic scripts with no bundler:
 
 ## Design
 
-Dark navy-violet canvas in the **Health design system** language: Outfit (display) +
-DM Sans (body) + JetBrains Mono (data readouts), teal as the lead accent, Material
-Symbols Rounded icons, 28px cards. See `~/.claude/skills/health-design-system`.
+Dark navy-violet canvas with Outfit (display), DM Sans (body), JetBrains Mono
+(data readouts), teal as the lead accent, Material Symbols Rounded icons, and
+28px cards.
 
 ## Data
 

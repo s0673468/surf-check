@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
@@ -77,6 +77,39 @@ globalThis.__surfCheckTest = {
 );
 
 const surf = context.__surfCheckTest;
+
+function markdownFilesUnder(relativeDir) {
+  return readdirSync(new URL(`../${relativeDir}/`, import.meta.url), {
+    withFileTypes: true,
+  }).flatMap((entry) => {
+    const relativePath = `${relativeDir}/${entry.name}`;
+    if (entry.isDirectory()) return markdownFilesUnder(relativePath);
+    if (entry.isFile() && entry.name.endsWith(".md")) return [relativePath];
+    return [];
+  });
+}
+
+test("public source docs do not expose private authoring paths", () => {
+  const publicTextFiles = [
+    "README.md",
+    "styles.css",
+    ...markdownFilesUnder("docs"),
+  ];
+  const publicText = publicTextFiles
+    .map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"))
+    .join("\n");
+
+  for (const marker of [
+    ["Health", "design", "system"].join(" "),
+    ["health", "design", "system"].join("-"),
+    ["~", ".claude"].join("/"),
+    ["German", "surfed"].join(" "),
+    ["/", "Users", "/"].join(""),
+    ["german", "chernukhin"].join(""),
+  ]) {
+    assert.equal(publicText.includes(marker), false, marker);
+  }
+});
 
 function seedForecasts() {
   const date = surf.dateKey(0);
