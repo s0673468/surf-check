@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "description": "Append manual surf observations here. Each entry pairs one forecast score or snapshot with what the beach actually did.",
+  "ratingScale": {
+    "1": "poor",
+    "2": "marginal",
+    "3": "workable",
+    "4": "good",
+    "5": "excellent"
+  },
+  "entryTemplate": {
+    "id": "YYYY-MM-DD-beach-id-HHMM",
+    "status": "observed",
+    "beachId": "joaquina",
+    "targetTime": "YYYY-MM-DDTHH:00:00-03:00",
+    "forecast": {
+      "score": 52,
+      "label": "workable",
+      "sample": {
+        "waveHeightM": 1.0,
+        "wavePeriodS": 8.0,
+        "waveDirectionDeg": 135,
+        "swellHeightM": 0.8,
+        "swellPeriodS": 8.0,
+        "swellDirectionDeg": 135,
+        "windSpeedKmh": 8,
+        "windDirectionDeg": 315,
+        "windGustsKmh": 12,
+        "tideState": 0.5
+      }
+    },
+    "observed": {
+      "rating": 3,
+      "heightM": 1.0,
+      "cleanliness": "clean",
+      "notes": "Short note from the beach check."
+    },
+    "tags": ["small-clean"]
+  },
+  "entries": []
+}
