@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "forecast-truth": "node scripts/forecast-truth.mjs calibration/forecast-truth-ledger.json",
     "test": "node --test tests/smoke.mjs"
   }
 }

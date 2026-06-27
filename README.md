@@ -37,15 +37,16 @@ make test    # run the smoke suite
 make check   # run both gates; CI uses this
 ```
 
-`make test` runs the no-dependency smoke suite (56 tests). These cover the scoring model
+`make test` runs the no-dependency smoke suite (58 tests). These cover the scoring model
 directly — wind monotonicity across **both** speed and the offshore→onshore angle (no
 glassy cliff, no cross-shore jump), the gust gate that spares a glassy morning, the
 surfable-floor continuity and above-floor readiness ramp, size separation, the
 period-aware closeout floor, exposure-class direction capping, aligned-vs-opposed windsea
 cleanliness, missing-weather neutrality, the normalized tide state, the date-keyed scored
-cache (no midnight staleness), and the timezone epoch — plus the radar, fetch-resilience,
-localization, and prose helpers. The suite loads the same classic scripts as `index.html`,
-in page order, so split-file script ordering stays covered.
+cache (no midnight staleness), forecast-truth ledger parsing, and the timezone epoch —
+plus the radar, fetch-resilience, localization, and prose helpers. The suite loads the
+same classic scripts as `index.html`, in page order, so split-file script ordering stays
+covered.
 
 ## Runtime structure
 
@@ -61,6 +62,13 @@ The app deliberately stays as classic scripts with no bundler:
   tile URL construction, and Leaflet radar layer lifecycle.
 - `app.js` — beach/profile data, localization, state, orchestration, DOM rendering,
   map marker rendering, day/spot prose, and shared formatting helpers.
+
+The local forecast-truth loop stays outside the browser runtime:
+
+- `calibration/forecast-truth-ledger.json` — append-only manual observations paired with
+  one forecast score or snapshot for a beach and local time.
+- `scripts/forecast-truth.mjs` — no-network helper that compares forecast score bands with
+  observed 1–5 session ratings and summarizes score and height bias.
 
 ## Layout
 
@@ -214,3 +222,15 @@ Brava (26.95°S), not the Floripa one. Full notes and the verified table live in
 `docs/spot-research.md`. The best validation is still a few local observation days — log
 where the model and the real beach disagree, then nudge `swellCenter` / `swellSpread` /
 `offshoreWind` / `idealTide` / `minSurfHeight`.
+
+For the local forecast-truth loop, append manual observations to
+`calibration/forecast-truth-ledger.json` after checking a beach. Pair the beach and local
+time with the forecast score or snapshot you saw, then add the observed 1–5 session rating,
+height, cleanliness, and tags. Run:
+
+```bash
+npm run forecast-truth
+```
+
+Use the summary to spot repeat bias before changing `score-model.js`; do not retune from
+one row.

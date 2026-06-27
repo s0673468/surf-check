@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import {
+  analyzeTruthLedger,
+  formatTruthSummary,
+  loadTruthLedgerFromFile,
+} from "../scripts/forecast-truth.mjs";
 
 const runtimeSources = [
   "forecast-api.js",
@@ -109,6 +114,55 @@ test("public source docs do not expose private authoring paths", () => {
   ]) {
     assert.equal(publicText.includes(marker), false, marker);
   }
+});
+
+test("forecast truth ledger is machine readable", () => {
+  const ledger = loadTruthLedgerFromFile(
+    new URL("../calibration/forecast-truth-ledger.json", import.meta.url),
+  );
+  const analysis = analyzeTruthLedger(ledger);
+
+  assert.equal(ledger.schemaVersion, 1);
+  assert.equal(analysis.summary.entryCount, 0);
+});
+
+test("forecast truth helper compares one forecast with one observed session", () => {
+  const analysis = analyzeTruthLedger({
+    schemaVersion: 1,
+    entries: [
+      {
+        id: "matadeiro-small-clean-fixture",
+        beachId: "matadeiro",
+        targetTime: "2026-06-21T08:00:00-03:00",
+        forecast: {
+          score: 42,
+          label: "Marginal",
+          sample: {
+            waveHeightM: 0.86,
+            wavePeriodS: 6.7,
+            windSpeedKmh: 1.8,
+          },
+        },
+        observed: {
+          rating: 3,
+          heightM: 0.8,
+          cleanliness: "clean",
+          notes: "Small, clean, and worth paddling.",
+        },
+        tags: ["small-clean", "size-underread"],
+      },
+    ],
+  });
+  const [entry] = analysis.comparisons;
+  const summary = formatTruthSummary(analysis);
+
+  assert.equal(entry.forecastBand, "marginal");
+  assert.equal(entry.observedBand, "workable");
+  assert.equal(entry.ratingDelta, 1);
+  assert.equal(entry.heightDeltaM, -0.06);
+  assert.equal(analysis.summary.tooPessimistic, 1);
+  assert.match(summary, /matadeiro/);
+  assert.match(summary, /\+1/);
 });
 
 function seedForecasts() {
