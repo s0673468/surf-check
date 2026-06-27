@@ -18,7 +18,7 @@ anywhere there's an offshore marine cell.
 | 1 | `app.js` | `BEACHES` — your spots | the `const BEACHES = [` array |
 | 2 | `app.js` | `SPOT_DATA_PROFILES` — optional per-spot physics | the `const SPOT_DATA_PROFILES = {` object |
 | 3 | `app.js` | Map center + zoom | `.setView([-27.59, -48.46], 11)` |
-| 4 | `forecast-api.js` | Your timezone | `const TZ = "America/Sao_Paulo"` |
+| 4 | `app.js` | Your timezone | `const TZ = "America/Sao_Paulo"` |
 | 5 | `index.html` | Title, description, region label, headline, `lang` | `<title>`, `<meta description>`, `<p class="eyebrow">`, `<h1>`, `<html lang>` |
 | 6 | `score-model.js` | Optional global scale calibration | `const SIZE_REF = 0.8` |
 
@@ -83,7 +83,7 @@ Set `[lat, lon]` to the center of your spots and pick a zoom (11 suits an
 island; use 9–10 for a long coastline, 12–13 for a tight cluster). The pins
 themselves come from each beach's `lat`/`lon`.
 
-## 4. Timezone (`forecast-api.js`)
+## 4. Timezone (`app.js`)
 
 ```js
 const TZ = "America/Sao_Paulo";
