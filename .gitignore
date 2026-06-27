@@ -1,5 +1,8 @@
 # Local Claude Code preview/launch helpers
 .claude/
 
+# Local graph output
+.understand-anything/
+
 # OS cruft
 .DS_Store
