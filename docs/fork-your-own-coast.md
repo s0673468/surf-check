@@ -136,8 +136,7 @@ provenance trail for your calibration.
 ## Verify
 
 ```bash
-node --check app.js
-npm test          # the scoring smoke suite — model invariants, not spot values
+make check        # syntax-check all runtime scripts and run the smoke suite
 python3 -m http.server 4173   # then open http://localhost:4173 and eyeball it
 ```
 
