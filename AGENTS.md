@@ -76,7 +76,7 @@ make check   # run both gates; CI uses this
 - `make lint` keeps the classic-script syntax gate in one place. It checks
   `forecast-api.js`, `score-model.js`, `forecast-selectors.js`,
   `rain-radar.js`, and `app.js` in the same order as the page.
-- `make test` runs the no-dependency smoke suite (56 tests) in
+- `make test` runs the no-dependency smoke suite (58 tests) in
   [tests/smoke.mjs](tests/smoke.mjs). It loads all runtime scripts in the same
   order as [index.html](index.html). If you change runtime selectors, scoring,
   API resilience, localization, or radar helpers, add or update focused coverage
