@@ -37,9 +37,10 @@ Agent-facing operating notes for this repo.
 
 - Prefer direct simplification over new abstractions.
 - Keep user-facing forecast and scoring text tied to the current scoring model:
-  core scoring, score tiers, score labels, and scoring reasons live in
-  [score-model.js](score-model.js), while day/spot prose and rendering live in
-  [app.js](app.js).
+  surf-region config and static text dictionaries live in
+  [surf-config.js](surf-config.js), core scoring, score tiers, score labels, and
+  scoring reasons live in [score-model.js](score-model.js), while day/spot
+  prose and rendering live in [app.js](app.js).
 - Treat forecast resilience as a product requirement: missing or partial browser
   API responses should degrade cleanly instead of crashing the page. API fetch
   and retry behavior live in [forecast-api.js](forecast-api.js); forecast views,
@@ -53,11 +54,19 @@ Agent-facing operating notes for this repo.
 ## Runtime Map
 
 - [index.html](index.html) loads the classic scripts in dependency order:
-  `forecast-api.js`, `score-model.js`, `forecast-selectors.js`,
+  `surf-config.js`, `runtime-utils.js`, `forecast-api.js`,
+  `score-model.js`, `forecast-selectors.js`, `forecast-prose.js`,
   `rain-radar.js`, then `app.js`.
-- [app.js](app.js) owns static beach/profile data, localization, state,
-  orchestration, DOM rendering, map marker rendering, and shared formatting
-  helpers.
+- [surf-config.js](surf-config.js) owns static beach/profile data, localized
+  static dictionaries, shared time-window constants, and the spot-profile
+  lookup.
+- [runtime-utils.js](runtime-utils.js) owns shared date, formatting, numeric,
+  compass, geometry, clamp, and selected-beach helpers.
+- [forecast-prose.js](forecast-prose.js) owns day summaries, spot reads,
+  metric explanations, nearby-spot contrast reasons, factor labels, and
+  confidence-chip metadata.
+- [app.js](app.js) owns localization accessors, state, orchestration, DOM
+  rendering, and map marker rendering.
 - [tests/smoke.mjs](tests/smoke.mjs) mirrors the same script order before
   exporting runtime helpers for direct tests.
 
@@ -67,15 +76,16 @@ Agent-facing operating notes for this repo.
 - The canonical local gates are:
 
 ```bash
-make lint    # syntax-check all five runtime scripts
+make lint    # syntax-check all eight runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
 make check   # run both gates; CI uses this
 ```
 
 - `make lint` keeps the classic-script syntax gate in one place. It checks
-  `forecast-api.js`, `score-model.js`, `forecast-selectors.js`,
-  `rain-radar.js`, and `app.js` in the same order as the page.
+  `surf-config.js`, `runtime-utils.js`, `forecast-api.js`, `score-model.js`,
+  `forecast-selectors.js`, `forecast-prose.js`, `rain-radar.js`, and `app.js`
+  in the same order as the page.
 - `make test` runs the no-dependency smoke suite in
   [tests/smoke.mjs](tests/smoke.mjs). It loads all runtime scripts in the same
   order as [index.html](index.html). If you change runtime selectors, scoring,
@@ -98,5 +108,6 @@ make check   # run both gates; CI uses this
 ## Docs
 
 - Keep [README.md](README.md) aligned with the actual validation commands and
-  the current runtime split across `forecast-api.js`, `score-model.js`,
-  `forecast-selectors.js`, `rain-radar.js`, and `app.js`.
+  the current runtime split across `surf-config.js`, `runtime-utils.js`,
+  `forecast-api.js`, `score-model.js`, `forecast-selectors.js`,
+  `forecast-prose.js`, `rain-radar.js`, and `app.js`.

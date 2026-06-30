@@ -8,13 +8,14 @@ import {
   loadTruthLedgerFromFile,
 } from "../scripts/forecast-truth.mjs";
 
-const runtimeSources = [
-  "forecast-api.js",
-  "score-model.js",
-  "forecast-selectors.js",
-  "rain-radar.js",
-  "app.js",
-].map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
+const indexHtml = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const runtimeScriptFiles = Array.from(
+  indexHtml.matchAll(/<script\b[^>]*\bsrc="\.\/([^"]+\.js)"[^>]*><\/script>/g),
+  (match) => match[1],
+);
+const runtimeSources = runtimeScriptFiles.map((file) =>
+  readFileSync(new URL(`../${file}`, import.meta.url), "utf8"),
+);
 const context = {
   console,
   URL,
@@ -49,6 +50,11 @@ globalThis.__surfCheckTest = {
   state,
   dateKey,
   describeDay,
+  describeCoastalFit,
+  describeSwell,
+  describeTide,
+  describeWeather,
+  describeWind,
   fetchBeachForecast,
   fetchJson,
   getForecastView,
@@ -73,7 +79,9 @@ globalThis.__surfCheckTest = {
   selectedForecastTimestampSeconds,
   degToCompass,
   numericCell,
+  buildSpotRead,
   compactSessionRead,
+  contrastReason,
   confidenceMeta,
   scoredSampleCache,
 };`,
@@ -82,6 +90,26 @@ globalThis.__surfCheckTest = {
 );
 
 const surf = context.__surfCheckTest;
+
+test("runtime script lists match page order", () => {
+  const makefile = readFileSync(new URL("../Makefile", import.meta.url), "utf8");
+  const lintScripts = makefile
+    .match(/^RUNTIME_SCRIPTS := (.+)$/m)?.[1]
+    .trim()
+    .split(/\s+/);
+
+  assert.deepEqual(runtimeScriptFiles, [
+    "surf-config.js",
+    "runtime-utils.js",
+    "forecast-api.js",
+    "score-model.js",
+    "forecast-selectors.js",
+    "forecast-prose.js",
+    "rain-radar.js",
+    "app.js",
+  ]);
+  assert.deepEqual(lintScripts, runtimeScriptFiles);
+});
 
 function markdownFilesUnder(relativeDir) {
   return readdirSync(new URL(`../${relativeDir}/`, import.meta.url), {
@@ -242,6 +270,12 @@ function cleanAlignedSample(beach, { height = 1.2, period = 12 } = {}) {
   };
 }
 
+function assertReadableProse(value) {
+  assert.equal(typeof value, "string");
+  assert.ok(value.length > 4);
+  assert.doesNotMatch(value, /\b(undefined|NaN)\b/);
+}
+
 async function withMockedBrowserIO({ fetch, setTimeout }, run) {
   const originalFetch = context.fetch;
   const originalSetTimeout = context.window.setTimeout;
@@ -360,6 +394,86 @@ test("day overview describes seeded forecast in both languages", () => {
     assert.equal(typeof day.peakScore, "number");
     assert.ok(!day.text.includes("undefined"));
   }
+});
+
+test("forecast prose helpers tolerate partial samples in both languages", () => {
+  seedForecasts();
+
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const partial = {
+    ...cleanAlignedSample(beach),
+    waveHeight: null,
+    wavePeriod: null,
+    swellHeight: null,
+    swellDirection: null,
+    swellPeriod: null,
+    windSpeed: null,
+    windDirection: null,
+    windGusts: null,
+    tideState: null,
+    seaLevel: null,
+    precipitationProbability: null,
+    cloudCover: null,
+  };
+  const score = surf.scoreSample(beach, partial, 0);
+
+  for (const lang of ["pt", "en"]) {
+    surf.state.lang = lang;
+    const reads = [
+      surf.describeSwell(beach, partial),
+      surf.describeWind(beach, partial),
+      surf.describeCoastalFit(beach, partial, score.parts.coastal),
+      surf.describeTide(beach, partial, score),
+      surf.describeWeather(partial),
+    ];
+
+    for (const read of reads) {
+      assertReadableProse(read.short);
+      assertReadableProse(read.detail);
+    }
+  }
+});
+
+test("nearby contrast prose falls back when scores are nearly tied", () => {
+  const selectedBeach = surf.BEACHES.find((item) => item.id === "praia-mole");
+  const otherBeach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const parts = { swell: 70, wind: 70, coastal: 70, tide: 70, weather: 70 };
+  const selectedScored = {
+    beach: selectedBeach,
+    sample: cleanAlignedSample(selectedBeach),
+    score: { parts },
+  };
+  const otherScored = {
+    beach: otherBeach,
+    sample: cleanAlignedSample(otherBeach),
+    score: { parts },
+  };
+
+  surf.state.lang = "en";
+  assert.match(surf.contrastReason(selectedScored, otherScored), /Mole and Joaquina/);
+  surf.state.lang = "pt";
+  assert.match(surf.contrastReason(selectedScored, otherScored), /Mole e Joaquina/);
+});
+
+test("nearby contrast prose names the dominant factor", () => {
+  const selectedBeach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const otherBeach = surf.BEACHES.find((item) => item.id === "campeche");
+  const selectedScored = {
+    beach: selectedBeach,
+    sample: cleanAlignedSample(selectedBeach),
+    score: { parts: { swell: 70, wind: 90, coastal: 70, tide: 70, weather: 70 } },
+  };
+  const otherScored = {
+    beach: otherBeach,
+    sample: {
+      ...cleanAlignedSample(otherBeach),
+      windDirection: (otherBeach.offshoreWind + 180) % 360,
+    },
+    score: { parts: { swell: 70, wind: 20, coastal: 70, tide: 70, weather: 70 } },
+  };
+
+  surf.state.lang = "en";
+  assert.match(surf.contrastReason(selectedScored, otherScored), /Wind is closer to offshore/);
 });
 
 test("rain radar metadata normalizes past and nowcast frames", () => {

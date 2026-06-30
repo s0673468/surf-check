@@ -8,7 +8,7 @@ or whether a section is actually breaking. Local checks should win over this fil
 
 A research + adversarial-verification pass (Surf-Forecast per-break "ideal swell +
 offshore wind", a local PT guide, Wikipedia) was fact-checked for geographic
-plausibility and applied to `BEACHES` in `app.js`. `swellCenter` = degrees the swell
+plausibility and applied to `BEACHES` in `surf-config.js`. `swellCenter` = degrees the swell
 ideally comes **from**; `offshoreWind` = degrees the grooming wind comes **from**;
 `idealTide` is now a normalized **0 (low) – 1 (high)** state, not metres.
 
