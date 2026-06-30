@@ -79,6 +79,7 @@ Agent-facing operating notes for this repo.
 make lint    # syntax-check all eight runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
+make test-mutations  # run only the focused mutation smoke
 make check   # run both gates; CI uses this
 ```
 
@@ -87,14 +88,20 @@ make check   # run both gates; CI uses this
   `forecast-selectors.js`, `forecast-prose.js`, `rain-radar.js`, and `app.js`
   in the same order as the page.
 - `make test` runs the no-dependency smoke suite in
-  [tests/smoke.mjs](tests/smoke.mjs). It loads all runtime scripts in the same
-  order as [index.html](index.html). If you change runtime selectors, scoring,
-  API resilience, localization, or radar helpers, add or update focused coverage
-  there. Scoring helpers that are only exercised
+  [tests/smoke.mjs](tests/smoke.mjs) and the focused mutation smoke in
+  [tests/mutation-smoke.mjs](tests/mutation-smoke.mjs). The smoke suite loads
+  all runtime scripts in the same order as [index.html](index.html). If you
+  change runtime selectors, scoring, API resilience, localization, radar
+  helpers, or prose thresholds, add or update focused coverage there. Scoring
+  helpers that are only exercised
   transitively (e.g. `tideScore`,
   `coastalFitScore`, `surfableHeightFactor`, `numericCell`) are exported into the
   test harness for direct unit tests — keep that list in sync when you add one.
   For syntax-only confidence on a touched split file, also run `node --check <file>`.
+- `make test-mutations` is a quick focused mutation pass. It mutates exact
+  source lines in memory and checks the suite kills representative comparator,
+  fallback, cache-key, numeric, geometry, weather, radar, and prose-threshold
+  changes without adding dependencies.
 - Do not add snapshot churn or DOM-heavy test scaffolding for logic that can be
   tested directly through the exported runtime helpers.
 

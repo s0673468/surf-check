@@ -83,6 +83,10 @@ globalThis.__surfCheckTest = {
   compactSessionRead,
   contrastReason,
   confidenceMeta,
+  scoreLabel,
+  pinClass,
+  summarizeConditions,
+  summarizeTiming,
   scoredSampleCache,
 };`,
   context,
@@ -893,6 +897,13 @@ test("forecast timestamp advances exactly one hour per forecast hour", () => {
   assert.equal(surf.selectedForecastTimestampSeconds(1, 9) - a, 86400);
 });
 
+test("forecast timestamp encodes Sao Paulo local time as UTC", () => {
+  const date = surf.dateKey(0);
+  const instant = new Date(surf.selectedForecastTimestampSeconds(0, 9) * 1000);
+
+  assert.equal(instant.toISOString(), `${date}T12:00:00.000Z`);
+});
+
 test("scoring penalizes onshore wind for the same swell", () => {
   seedForecasts();
 
@@ -1032,6 +1043,91 @@ test("fetchJson does not retry permanent HTTP failures", async () => {
   );
 });
 
+test("fetchJson exhausts retryable failures with fixed backoff delays", async () => {
+  let attempts = 0;
+  const delays = [];
+
+  await withMockedBrowserIO(
+    {
+      fetch: async () => {
+        attempts += 1;
+        return {
+          ok: false,
+          status: 503,
+        };
+      },
+      setTimeout: (callback, milliseconds) => {
+        delays.push(milliseconds);
+        callback();
+        return 0;
+      },
+    },
+    async () => {
+      await assert.rejects(
+        surf.fetchJson(new URL("https://example.test/forecast")),
+        /HTTP 503/,
+      );
+      assert.equal(attempts, 3);
+      assert.deepEqual(delays, [300, 800]);
+    },
+  );
+});
+
+test("beach forecast requests pin the Open-Meteo query contract", async () => {
+  const requestedUrls = [];
+  const time = [`${surf.dateKey(0)}T06:00`, `${surf.dateKey(0)}T07:00`];
+
+  await withMockedBrowserIO(
+    {
+      fetch: async (url) => {
+        const parsed = new URL(String(url));
+        requestedUrls.push(parsed);
+        return {
+          ok: true,
+          async json() {
+            if (parsed.hostname === "marine-api.open-meteo.com") {
+              return { hourly: { time, wave_height: [1.1, 1.2] } };
+            }
+            return { hourly: { time, temperature_2m: [21, 22] } };
+          },
+        };
+      },
+    },
+    async () => {
+      const beach = surf.BEACHES[0];
+      const forecast = await surf.fetchBeachForecast(beach);
+      const weatherUrl = requestedUrls.find((url) => url.hostname === "api.open-meteo.com");
+      const marineUrl = requestedUrls.find((url) => url.hostname === "marine-api.open-meteo.com");
+
+      assert.equal(forecast.beachId, beach.id);
+      assert.equal(requestedUrls.length, 2);
+      assert.ok(weatherUrl);
+      assert.ok(marineUrl);
+      assert.equal(weatherUrl.pathname, "/v1/forecast");
+      assert.equal(weatherUrl.searchParams.get("latitude"), String(beach.lat));
+      assert.equal(weatherUrl.searchParams.get("longitude"), String(beach.lon));
+      assert.equal(
+        weatherUrl.searchParams.get("hourly"),
+        "temperature_2m,apparent_temperature,precipitation_probability,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+      );
+      assert.equal(weatherUrl.searchParams.get("timezone"), "America/Sao_Paulo");
+      assert.equal(weatherUrl.searchParams.get("forecast_days"), "4");
+      assert.equal(weatherUrl.searchParams.get("wind_speed_unit"), "kmh");
+
+      assert.equal(marineUrl.pathname, "/v1/marine");
+      assert.equal(marineUrl.searchParams.get("latitude"), String(beach.lat));
+      assert.equal(marineUrl.searchParams.get("longitude"), String(beach.lon));
+      assert.equal(
+        marineUrl.searchParams.get("hourly"),
+        "wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,secondary_swell_wave_height,secondary_swell_wave_direction,secondary_swell_wave_period,wind_wave_height,wind_wave_direction,wind_wave_period,sea_level_height_msl,sea_surface_temperature",
+      );
+      assert.equal(marineUrl.searchParams.get("timezone"), "America/Sao_Paulo");
+      assert.equal(marineUrl.searchParams.get("forecast_days"), "4");
+      assert.equal(marineUrl.searchParams.get("cell_selection"), "sea");
+    },
+  );
+});
+
 test("beach forecasts reject successful responses without hourly time arrays", async () => {
   await withMockedBrowserIO(
     {
@@ -1076,6 +1172,52 @@ test("beach forecasts normalize missing optional hourly fields", async () => {
       assert.deepEqual(Array.from(forecast.weather.wind_speed_10m), [null, null]);
       assert.deepEqual(forecast.marine.wave_height, [1.1, 1.2]);
       assert.deepEqual(Array.from(forecast.marine.sea_surface_temperature), [null, null]);
+    },
+  );
+});
+
+test("scored samples degrade short API arrays to missing cells", async () => {
+  const beach = surf.selectedBeach();
+  const time = [`${surf.dateKey(0)}T06:00`, `${surf.dateKey(0)}T07:00`];
+
+  await withMockedBrowserIO(
+    {
+      fetch: async (url) => ({
+        ok: true,
+        async json() {
+          if (String(url).includes("marine-api")) {
+            return {
+              hourly: {
+                time,
+                wave_height: [1.1],
+                wave_direction: [beach.swellCenter],
+                wave_period: [12],
+              },
+            };
+          }
+          return {
+            hourly: {
+              time,
+              temperature_2m: [21],
+              wind_direction_10m: [beach.offshoreWind],
+            },
+          };
+        },
+      }),
+    },
+    async () => {
+      const forecast = await surf.fetchBeachForecast(beach);
+
+      surf.state.forecasts.clear();
+      surf.scoredSampleCache.clear();
+      surf.state.forecasts.set(beach.id, forecast);
+      const scored = surf.getScoredSample(beach, 0, 7);
+
+      assert.ok(scored);
+      assert.equal(scored.sample.temperature, null);
+      assert.equal(scored.sample.windDirection, null);
+      assert.equal(scored.sample.waveHeight, null);
+      assert.equal(scored.sample.wavePeriod, null);
     },
   );
 });
@@ -1205,6 +1347,50 @@ test("scored-sample cache keys on the absolute date so it cannot go stale across
   assert.ok(keys.some((key) => key.includes(today)), `cache key should encode the resolved date ${today}, got ${keys[0]}`);
 });
 
+test("scored-sample cache keys on language as well as date", () => {
+  seedForecasts();
+  surf.scoredSampleCache.clear();
+  const beach = surf.selectedBeach();
+
+  surf.state.lang = "pt";
+  const pt = surf.getScoredSample(beach, 0, 8);
+  const ptRead = surf.compactSessionRead(pt);
+
+  surf.state.lang = "en";
+  const en = surf.getScoredSample(beach, 0, 8);
+  const enRead = surf.compactSessionRead(en);
+
+  const keys = Array.from(surf.scoredSampleCache.keys());
+  assert.equal(keys.length, 2);
+  assert.ok(keys.some((key) => key.startsWith(`pt:${beach.id}:`)));
+  assert.ok(keys.some((key) => key.startsWith(`en:${beach.id}:`)));
+  assert.notEqual(pt.score.label, en.score.label);
+  assert.notEqual(ptRead, enRead);
+});
+
+test("score labels and pin classes hold every tier boundary", () => {
+  const rows = [
+    [37, "Ruim", "Poor", "pin-bad"],
+    [38, "Fraco", "Marginal", "pin-poor"],
+    [51, "Fraco", "Marginal", "pin-poor"],
+    [52, "Surfável", "Workable", "pin-fair"],
+    [65, "Surfável", "Workable", "pin-fair"],
+    [66, "Bom", "Good", "pin-good"],
+    [79, "Bom", "Good", "pin-good"],
+    [80, "Excelente", "Excellent", "pin-excellent"],
+  ];
+
+  for (const [score, ptLabel, enLabel, pin] of rows) {
+    surf.state.lang = "pt";
+    assert.equal(surf.scoreLabel(score), ptLabel, `pt label for ${score}`);
+    surf.state.lang = "en";
+    assert.equal(surf.scoreLabel(score), enLabel, `en label for ${score}`);
+    assert.equal(surf.pinClass(score), pin, `pin for ${score}`);
+  }
+  assert.equal(surf.pinClass(Number.NaN), "pin-empty");
+  surf.state.lang = "pt";
+});
+
 test("tideScore peaks at the ideal state, floors at the spread edge, and is neutral when missing", () => {
   assert.ok(surf.tideScore(0.5, 0.5, 0.5) > 0.95);
   assert.ok(surf.tideScore(0.5, 0.5, 0.5) > surf.tideScore(0.8, 0.5, 0.5));
@@ -1249,6 +1435,69 @@ test("day overview describes a flat day without crashing in both languages", () 
     assert.ok(day.peakScore < 45, `flat day should peak low, got ${day.peakScore}`);
   }
   surf.state.lang = "pt";
+});
+
+test("day prose helper keys track size, cleanliness, windows, and trends", () => {
+  const entry = (hour, score, height, wind) => ({
+    hour,
+    scored: {
+      sample: { waveHeight: height, swellHeight: height, wavePeriod: 12, swellPeriod: 12 },
+      score: { score, parts: { wind } },
+    },
+  });
+  const conditionKeys = (result) => ({
+    sizeKey: result.sizeKey,
+    cleanKey: result.cleanKey,
+  });
+  const timingKeys = (result) => ({
+    windowHours: Array.from(result.windowHours),
+    windowKey: result.windowKey,
+    allDay: result.allDay,
+    trend: result.trend,
+  });
+  const conditionScan = [
+    entry(8, 72, 1.2, 82),
+    entry(8, 68, 1.4, 74),
+    entry(14, 52, 0.8, 42),
+  ];
+
+  assert.deepEqual(
+    conditionKeys(surf.summarizeConditions(conditionScan, { hour: 8 }, 72)),
+    { sizeKey: "fun", cleanKey: "clean" },
+  );
+  assert.equal(
+    surf.summarizeConditions(conditionScan, { hour: 8 }, 20).sizeKey,
+    "flat",
+  );
+
+  const fading = [
+    { hour: 6, score: 70 },
+    { hour: 7, score: 68 },
+    { hour: 8, score: 66 },
+    { hour: 14, score: 45 },
+    { hour: 15, score: 44 },
+    { hour: 16, score: 43 },
+  ];
+  assert.deepEqual(
+    timingKeys(surf.summarizeTiming(fading, { hour: 7 }, 70)),
+    { windowHours: [6, 7, 8], windowKey: "early", allDay: false, trend: "fadesPM" },
+  );
+
+  const allDay = surf.HOURS.map((hour) => ({ hour, score: 61 }));
+  assert.deepEqual(
+    timingKeys(surf.summarizeTiming(allDay, { hour: 12 }, 61)),
+    { windowHours: Array.from(surf.HOURS), windowKey: "midday", allDay: true, trend: "steady" },
+  );
+
+  const building = [
+    { hour: 6, score: 40 },
+    { hour: 7, score: 42 },
+    { hour: 8, score: 44 },
+    { hour: 14, score: 64 },
+    { hour: 15, score: 66 },
+    { hour: 16, score: 68 },
+  ];
+  assert.equal(surf.summarizeTiming(building, { hour: 16 }, 68).trend, "buildsPM");
 });
 
 test("a clean-fun rescued day's one-liner credits the clean call, not swell as the problem", () => {

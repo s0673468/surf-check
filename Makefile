@@ -4,7 +4,7 @@ ACTIONLINT_VERSION ?= v1.7.12
 ACTIONLINT ?= $(shell if command -v actionlint >/dev/null 2>&1; then command -v actionlint; elif command -v go >/dev/null 2>&1; then gobin="$$(go env GOBIN)"; if [ -n "$$gobin" ]; then printf "%s/actionlint" "$$gobin"; else printf "%s/bin/actionlint" "$$(go env GOPATH)"; fi; else printf "actionlint"; fi)
 RUNTIME_SCRIPTS := surf-config.js runtime-utils.js forecast-api.js score-model.js forecast-selectors.js forecast-prose.js rain-radar.js app.js
 
-.PHONY: check ensure-actionlint lint lint-workflows test
+.PHONY: check ensure-actionlint lint lint-workflows test test-mutations
 
 check: lint test
 
@@ -29,3 +29,6 @@ lint-workflows: ensure-actionlint
 
 test:
 	$(NPM) test
+
+test-mutations:
+	$(NPM) run test:mutations
