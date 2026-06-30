@@ -126,7 +126,6 @@ const BEACHES = [
       "Short, open beachbreak that gets punchy fast. It likes organized east to southeast swell and cleans up with west to northwest wind, but it loses shape quickly when the wind turns onshore.",
     whyNearby:
       "Mole and Joaquina are close, but Mole is shorter and steeper with rocky ends, so small changes in size, wind, or sandbar shape show up faster here.",
-    traits: ["Picks up swell quickly", "Wind sensitive", "Can get powerful"],
   },
   {
     id: "joaquina",
@@ -148,7 +147,6 @@ const BEACHES = [
       "Classic ocean-facing Floripa beachbreak by the dunes. It can hold a little more size than Mole and tends to reward organized east-southeast swell with offshore west to northwest wind.",
     whyNearby:
       "Joaquina and Campeche share the same open coast, but the main Joaquina peak has different banks and headland influence, so the same swell can feel more focused here.",
-    traits: ["Holds more size", "Bank dependent", "Competition beach"],
   },
   {
     id: "campeche",
@@ -170,7 +168,6 @@ const BEACHES = [
       "Long, exposed beach with shifting banks and room for different peaks. It can produce longer right-hand sections around the known banks, but one end can work while another is soft or bumpy.",
     whyNearby:
       "Campeche is nearly continuous with Joaquina, but the longer beach, different banks, and island-side exposure mean swell lines do not always break the same way.",
-    traits: ["Long beach", "Shifting peaks", "Can offer runners"],
   },
   {
     id: "barra-da-lagoa",
@@ -192,7 +189,6 @@ const BEACHES = [
       "More protected than the open east beaches, with a softer channel-side feel. It is often more approachable when Mole or Mocambique are too raw.",
     whyNearby:
       "Barra sits by the lagoon channel and tucks behind coastal shape, so nearby open beaches can be bigger while Barra stays smaller and cleaner.",
-    traits: ["More forgiving", "Swell filtered", "Good fallback"],
   },
   {
     id: "mocambique",
@@ -214,7 +210,6 @@ const BEACHES = [
       "Long, undeveloped open coast that catches swell early. The tradeoff is variability: wind and sandbar quality can change a lot along the beach.",
     whyNearby:
       "Mocambique connects toward Barra, but it is much less sheltered, so the same swell can be larger and less organized here while Barra remains mellower.",
-    traits: ["Very exposed", "Many peaks", "Raw when windy"],
   },
   {
     id: "santinho",
@@ -236,7 +231,6 @@ const BEACHES = [
       "North-east angled beach under Morro das Aranhas. It responds differently from the east coast because it sees more east to northeast energy and a slightly different wind angle.",
     whyNearby:
       "Santinho is beside Ingleses, but its beach angle is more exposed to east-facing swell and less protected by the northern bay shape.",
-    traits: ["Angle sensitive", "Can be peaky", "North-east exposure"],
   },
   {
     id: "brava",
@@ -258,7 +252,6 @@ const BEACHES = [
       "North-shore beach framed by cliffs. It likes east and east-northeast energy more than the south-east beaches do, and it can feel powerful for its size.",
     whyNearby:
       "Brava is close to Ingleses, but its cliff-framed angle faces incoming swell more directly, so it can have more push when Ingleses looks smaller.",
-    traits: ["East swell magnet", "Powerful peaks", "Cliff framed"],
   },
   {
     id: "ingleses",
@@ -281,7 +274,6 @@ const BEACHES = [
       "Wide north-side beach that is often softer than Brava or Santinho. It can be useful when you want a more approachable session, but it may miss some swell angles.",
     whyNearby:
       "Ingleses sits between Brava and Santinho but has a broader, more protected bay feel, so close-by beaches can show more size and power.",
-    traits: ["Softer option", "Broad bay feel", "Less powerful"],
   },
   {
     id: "matadeiro",
@@ -303,7 +295,6 @@ const BEACHES = [
       "South island cove with more open Atlantic energy than Armacao. It usually wants south-east to south-south-east swell with northwest wind to keep the faces clean.",
     whyNearby:
       "Matadeiro is next to Armacao, but the river and cove shape expose it to more ocean energy, so it can be surfable while Armacao is small.",
-    traits: ["More exposed than Armacao", "Good shape with SE swell", "Foot access"],
   },
   {
     id: "armacao",
@@ -326,7 +317,6 @@ const BEACHES = [
       "More sheltered south-side beach. It can be a useful softer option when Matadeiro or Lagoinha do Leste are too raw, but it may need more swell to wake up.",
     whyNearby:
       "Armacao is beside Matadeiro, but it sits in a more protected pocket, so the same swell can lose size and power before it reaches the beach.",
-    traits: ["Protected", "Needs more swell", "Softer fallback"],
   },
   {
     id: "lagoinha-do-leste",
@@ -348,7 +338,6 @@ const BEACHES = [
       "Remote, exposed beach with few shelter options. When swell and wind line up it can be a standout, but it can also turn raw quickly.",
     whyNearby:
       "Lagoinha do Leste is deeper on the south-east corner, so cliffs and open exposure can make it larger or more wind-affected than Matadeiro or Armacao.",
-    traits: ["Remote", "Very exposed", "High upside"],
   },
 ];
 
@@ -541,67 +530,56 @@ const COMPASS = {
 const BEACH_PT = {
   "praia-mole": {
     breakType: "Beachbreak de areia íngreme",
-    traits: ["Pega swell rápido", "Sensível ao vento", "Pode ficar forte"],
     whyNearby:
       "Mole e Joaquina são pertinho, mas a Mole é mais curta e íngreme, com pontas de pedra, então pequenas mudanças de tamanho, vento ou banco aparecem mais rápido aqui.",
   },
   joaquina: {
     breakType: "Beachbreak de bancos de areia",
-    traits: ["Segura mais tamanho", "Depende do banco", "Praia de campeonato"],
     whyNearby:
       "Joaquina e Campeche dividem a mesma costa aberta, mas o pico principal da Joaquina tem bancos e influência de ponta diferentes, então o mesmo swell pode chegar mais focado aqui.",
   },
   campeche: {
     breakType: "Beachbreak longo de bancos",
-    traits: ["Praia longa", "Picos que mudam", "Pode dar parede"],
     whyNearby:
       "Campeche é quase contínua com a Joaquina, mas a praia mais longa, os bancos diferentes e a exposição voltada à ilha fazem as linhas de swell quebrarem de jeitos diferentes.",
   },
   "barra-da-lagoa": {
     breakType: "Beachbreak de enseada e canal",
-    traits: ["Mais tranquila", "Swell filtrado", "Boa alternativa"],
     whyNearby:
       "A Barra fica junto ao canal da lagoa e se esconde atrás do formato da costa, então praias abertas próximas podem estar maiores enquanto a Barra fica menor e mais limpa.",
   },
   mocambique: {
     breakType: "Beachbreak longo e aberto",
-    traits: ["Muito exposta", "Vários picos", "Crua com vento"],
     whyNearby:
       "Moçambique se conecta à Barra, mas é bem menos abrigada, então o mesmo swell pode chegar maior e mais bagunçado aqui, enquanto a Barra fica mais tranquila.",
   },
   santinho: {
     breakType: "Beachbreak de enseada",
-    traits: ["Sensível ao ângulo", "Picos definidos", "Exposição nordeste"],
     whyNearby:
       "O Santinho fica ao lado dos Ingleses, mas seu ângulo é mais exposto a swells de leste e menos protegido pelo formato da baía ao norte.",
   },
   brava: {
     breakType: "Beachbreak entre falésias",
-    traits: ["Ímã de swell leste", "Picos com força", "Entre falésias"],
     whyNearby:
       "A Brava fica perto dos Ingleses, mas seu ângulo entre falésias encara o swell de frente, então pode ter mais força quando os Ingleses parecem menores.",
   },
   ingleses: {
     breakType: "Beachbreak largo",
-    traits: ["Opção mais suave", "Baía aberta", "Menos força"],
     whyNearby:
       "Os Ingleses ficam entre a Brava e o Santinho, mas têm uma baía mais larga e protegida, então praias próximas podem mostrar mais tamanho e força.",
   },
   matadeiro: {
     breakType: "Beachbreak de enseada",
-    traits: ["Mais exposta que a Armação", "Boa forma com swell SE", "Acesso a pé"],
     whyNearby:
       "O Matadeiro fica ao lado da Armação, mas o rio e o formato de enseada o expõem a mais energia do mar, então pode estar surfável enquanto a Armação está pequena.",
   },
   armacao: {
     breakType: "Beachbreak protegido",
-    traits: ["Protegida", "Precisa de mais swell", "Alternativa suave"],
     whyNearby:
       "A Armação fica ao lado do Matadeiro, mas num canto mais protegido, então o mesmo swell pode perder tamanho e força antes de chegar à praia.",
   },
   "lagoinha-do-leste": {
     breakType: "Beachbreak remoto",
-    traits: ["Remota", "Muito exposta", "Alto potencial"],
     whyNearby:
       "A Lagoinha do Leste fica mais no canto sudeste, então as falésias e a exposição aberta podem deixá-la maior ou mais afetada pelo vento do que o Matadeiro ou a Armação.",
   },
@@ -1141,9 +1119,6 @@ function renderSelectedSummary(view = getForecastView()) {
       </div>
     </div>
     <p class="spot-read">${escapeHtml(buildSpotRead(scored))}</p>
-    <div class="trait-list">
-      ${tBeach(beach, "traits").map((trait) => `<span>${escapeHtml(trait)}</span>`).join("")}
-    </div>
   `;
 
   renderMetrics(scored);

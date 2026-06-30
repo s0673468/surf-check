@@ -1342,22 +1342,6 @@ h1 {
   padding: 12px 14px;
 }
 
-.trait-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.trait-list span {
-  background: var(--secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  color: var(--fg2);
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 5px 10px;
-}
-
 /* ---------- Metric tiles ---------- */
 .metric-grid {
   display: grid;

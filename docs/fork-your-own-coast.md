@@ -53,7 +53,6 @@ Display / prose (shown in the UI, not scored):
 
 - `note`, `region`, `exposure`, `breakType` — short labels used for grouping and the spot header.
 - `profile`, `whyNearby` — the plain-language paragraphs in the detail and "closest spots" views.
-- `traits` — array of short tag chips.
 
 ## 2. `SPOT_DATA_PROFILES` — optional physics, keyed by `id`
 
