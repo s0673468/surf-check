@@ -1144,9 +1144,6 @@ function renderSelectedSummary(view = getForecastView()) {
     <div class="trait-list">
       ${tBeach(beach, "traits").map((trait) => `<span>${escapeHtml(trait)}</span>`).join("")}
     </div>
-    <ul class="reason-list">
-      ${score.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
-    </ul>
   `;
 
   renderMetrics(scored);
