@@ -369,6 +369,14 @@ const state = {
     selectedFrameIndex: -1,
     layer: null,
   },
+  sessionPlanner: {
+    intent: "any",
+    homeBeachId: "",
+    maxDistanceKm: "",
+    earliestHour: HOUR_MIN,
+    latestHour: HOUR_MAX,
+    open: true,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -392,6 +400,31 @@ const UI = {
     today: "Hoje",
     now: "Agora",
     daySummary: "Resumo do dia",
+    nextSessions: "Suas próximas sessões",
+    nextSessionsClosed: "Planejar sessão",
+    bestHourNow: (day, hour, beach, score) => `Largar tudo: ${day} ${hour} em ${beach} (${score})`,
+    sessionEmpty: "Sem janela surfável com estes filtros.",
+    sessionIntent: "Prancha",
+    sessionIntentAny: "Qualquer",
+    sessionIntentShortboard: "Pranchinha",
+    sessionIntentLongboard: "Longboard",
+    sessionHome: "Saindo de",
+    sessionNoHome: "Sem ponto",
+    sessionSetHome: "Usar selecionada",
+    sessionMaxDistance: "Máx km",
+    sessionEarliest: "Depois de",
+    sessionLatest: "Até",
+    sessionSlopeBuilding: "subindo",
+    sessionSlopeHolding: "segurando",
+    sessionSlopeFading: "caindo",
+    sessionTideLow: "baixa",
+    sessionTideMid: "média",
+    sessionTideHigh: "cheia",
+    sessionTideIncoming: "enchendo",
+    sessionTideDraining: "vazando",
+    sessionTideSteady: "parada",
+    sessionTidePhrase: (phase, trend) => `maré ${phase} ${trend}`,
+    sessionDistanceFromHome: (distance) => `${distance} de casa`,
     bestBets: "Melhores opções",
     topPick: (label) => `Top do dia · ${label}`,
     selectedSpot: "Praia selecionada",
@@ -442,6 +475,31 @@ const UI = {
     today: "Today",
     now: "Now",
     daySummary: "The day at a glance",
+    nextSessions: "Your next sessions",
+    nextSessionsClosed: "Plan session",
+    bestHourNow: (day, hour, beach, score) => `Drop everything: ${day} ${hour} at ${beach} (${score})`,
+    sessionEmpty: "No surfable window with these filters.",
+    sessionIntent: "Board",
+    sessionIntentAny: "Any",
+    sessionIntentShortboard: "Shortboard",
+    sessionIntentLongboard: "Longboard",
+    sessionHome: "From",
+    sessionNoHome: "No home",
+    sessionSetHome: "Use selected",
+    sessionMaxDistance: "Max km",
+    sessionEarliest: "After",
+    sessionLatest: "Until",
+    sessionSlopeBuilding: "building",
+    sessionSlopeHolding: "holding",
+    sessionSlopeFading: "fading",
+    sessionTideLow: "low",
+    sessionTideMid: "mid",
+    sessionTideHigh: "high",
+    sessionTideIncoming: "incoming",
+    sessionTideDraining: "draining",
+    sessionTideSteady: "steady",
+    sessionTidePhrase: (phase, trend) => `${phase} ${trend} tide`,
+    sessionDistanceFromHome: (distance) => `${distance} from home`,
     bestBets: "Best bets",
     topPick: (label) => `Top pick · ${label}`,
     selectedSpot: "Selected spot",
@@ -608,6 +666,54 @@ function setLang(lang) {
   render();
 }
 
+function defaultSessionPlannerState() {
+  return {
+    intent: "any",
+    homeBeachId: "",
+    maxDistanceKm: "",
+    earliestHour: HOUR_MIN,
+    latestHour: HOUR_MAX,
+    open: true,
+  };
+}
+
+function loadSessionPlannerState() {
+  const fallback = defaultSessionPlannerState();
+  let parsed = {};
+  try {
+    parsed = JSON.parse(window.localStorage.getItem("surf-session-planner") || "{}");
+  } catch (error) {
+    parsed = {};
+  }
+
+  const intent = ["any", "shortboard", "longboard"].includes(parsed.intent)
+    ? parsed.intent
+    : fallback.intent;
+  const homeBeachId = BEACHES.some((beach) => beach.id === parsed.homeBeachId)
+    ? parsed.homeBeachId
+    : "";
+  const earliestHour = clamp(Number(parsed.earliestHour), HOUR_MIN, HOUR_MAX);
+  const latestHour = clamp(Number(parsed.latestHour), HOUR_MIN, HOUR_MAX);
+  const maxDistance = Number(parsed.maxDistanceKm);
+
+  return {
+    intent,
+    homeBeachId,
+    maxDistanceKm: Number.isFinite(maxDistance) && maxDistance > 0 ? String(maxDistance) : "",
+    earliestHour: Number.isFinite(earliestHour) ? earliestHour : fallback.earliestHour,
+    latestHour: Number.isFinite(latestHour) ? latestHour : fallback.latestHour,
+    open: typeof parsed.open === "boolean" ? parsed.open : fallback.open,
+  };
+}
+
+function saveSessionPlannerState() {
+  try {
+    window.localStorage.setItem("surf-session-planner", JSON.stringify(state.sessionPlanner));
+  } catch (error) {
+    /* ignore storage failures */
+  }
+}
+
 const elements = {};
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -620,6 +726,7 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.metricGrid = document.querySelector("#metricGrid");
   elements.rankedList = document.querySelector("#rankedList");
   elements.dayOverview = document.querySelector("#dayOverview");
+  elements.nextSessions = document.querySelector("#nextSessions");
   elements.timelinePanel = document.querySelector("#timelinePanel");
   elements.map = document.querySelector("#map");
   elements.fallbackMap = document.querySelector("#fallbackMap");
@@ -632,6 +739,7 @@ document.addEventListener("DOMContentLoaded", () => {
     /* ignore storage failures */
   }
   if (stored === "pt" || stored === "en") state.lang = stored;
+  state.sessionPlanner = loadSessionPlannerState();
   document.documentElement.lang = state.lang === "pt" ? "pt-BR" : "en";
 
   if (elements.langToggle) {
@@ -942,12 +1050,17 @@ function renderData() {
 
   updateMarkers(view);
   renderDayOverview();
+  renderSessionPlanner();
   renderRankedList(view);
   renderSelectedSummary(view);
   renderTimeline(view);
 }
 
 function renderLoading() {
+  if (elements.nextSessions) {
+    elements.nextSessions.hidden = true;
+    elements.nextSessions.innerHTML = "";
+  }
   elements.rankedList.innerHTML = `<div class="empty-state">${escapeHtml(t("loadingBeaches"))}</div>`;
   elements.selectedSummary.innerHTML = `<div class="empty-state">${escapeHtml(t("loading"))}</div>`;
   elements.metricGrid.innerHTML = "";
@@ -955,6 +1068,10 @@ function renderLoading() {
 }
 
 function renderError() {
+  if (elements.nextSessions) {
+    elements.nextSessions.hidden = true;
+    elements.nextSessions.innerHTML = "";
+  }
   elements.rankedList.innerHTML = `
     <div class="empty-state" role="alert">
       <span>${escapeHtml(t("errorState"))}</span>
@@ -1483,6 +1600,234 @@ function renderDayOverview() {
       <p class="day-overview-text">${escapeHtml(day.text)}</p>
     </div>
   `;
+}
+
+function renderSessionPlanner() {
+  if (!elements.nextSessions) return;
+
+  const constraints = buildSessionPlannerConstraints();
+  const plan = planSessions(BEACHES, constraints);
+  const showBestHour = plan.bestHour && plan.bestHour.score >= effectiveTierFloor(constraints);
+
+  elements.nextSessions.hidden = false;
+  elements.nextSessions.innerHTML = `
+    <details class="next-sessions-details" ${state.sessionPlanner.open ? "open" : ""}>
+      <summary>
+        <span class="section-head session-summary-head">
+          <span>
+            <span class="head-icon material-symbols-rounded" aria-hidden="true">travel_explore</span>${escapeHtml(t("nextSessions"))}
+          </span>
+          <span>${escapeHtml(showBestHour ? t("nextSessionsClosed") : t("sessionEmpty"))}</span>
+        </span>
+      </summary>
+      <div class="session-planner-body">
+        ${renderSessionPlannerControls()}
+        ${showBestHour ? renderBestHourCallout(plan.bestHour) : ""}
+        ${
+          plan.windows.length
+            ? `<div class="session-card-list">${plan.windows.map((window, index) => renderSessionCard(window, index)).join("")}</div>`
+            : `<div class="empty-state">${escapeHtml(t("sessionEmpty"))}</div>`
+        }
+      </div>
+    </details>
+  `;
+
+  const details = elements.nextSessions.querySelector("details");
+  if (details) {
+    details.addEventListener("toggle", () => {
+      state.sessionPlanner.open = details.open;
+      saveSessionPlannerState();
+    });
+  }
+
+  elements.nextSessions.querySelectorAll("[data-session-control]").forEach((control) => {
+    control.addEventListener("change", () => updateSessionPlannerControl(control));
+  });
+
+  const setHome = elements.nextSessions.querySelector("[data-set-selected-home]");
+  if (setHome) {
+    setHome.addEventListener("click", () => {
+      state.sessionPlanner.homeBeachId = state.selectedBeachId;
+      saveSessionPlannerState();
+      renderData();
+    });
+  }
+
+  elements.nextSessions.querySelectorAll("[data-session-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedBeachId = button.dataset.beachId;
+      state.selectedDayOffset = Number(button.dataset.dayOffset);
+      state.selectedHour = Number(button.dataset.hour);
+      render();
+    });
+  });
+}
+
+function renderSessionPlannerControls() {
+  const settings = state.sessionPlanner;
+  return `
+    <div class="session-controls" aria-label="${escapeHtml(t("nextSessions"))}">
+      <label class="session-field">
+        <span>${escapeHtml(t("sessionIntent"))}</span>
+        <select data-session-control="intent">
+          ${sessionOption("any", t("sessionIntentAny"), settings.intent)}
+          ${sessionOption("shortboard", t("sessionIntentShortboard"), settings.intent)}
+          ${sessionOption("longboard", t("sessionIntentLongboard"), settings.intent)}
+        </select>
+      </label>
+      <label class="session-field session-home-field">
+        <span>${escapeHtml(t("sessionHome"))}</span>
+        <select data-session-control="homeBeachId">
+          ${sessionOption("", t("sessionNoHome"), settings.homeBeachId)}
+          ${BEACHES.map((beach) => sessionOption(beach.id, beach.name, settings.homeBeachId)).join("")}
+        </select>
+      </label>
+      <button type="button" class="session-set-home" data-set-selected-home>
+        <span class="material-symbols-rounded" aria-hidden="true">my_location</span>
+        <span>${escapeHtml(t("sessionSetHome"))}</span>
+      </button>
+      <label class="session-field session-number-field">
+        <span>${escapeHtml(t("sessionMaxDistance"))}</span>
+        <input data-session-control="maxDistanceKm" type="number" min="1" max="80" step="1" value="${escapeHtml(settings.maxDistanceKm)}" inputmode="numeric" />
+      </label>
+      <label class="session-field session-number-field">
+        <span>${escapeHtml(t("sessionEarliest"))}</span>
+        <input data-session-control="earliestHour" type="number" min="${HOUR_MIN}" max="${HOUR_MAX}" step="1" value="${settings.earliestHour}" inputmode="numeric" />
+      </label>
+      <label class="session-field session-number-field">
+        <span>${escapeHtml(t("sessionLatest"))}</span>
+        <input data-session-control="latestHour" type="number" min="${HOUR_MIN}" max="${HOUR_MAX}" step="1" value="${settings.latestHour}" inputmode="numeric" />
+      </label>
+    </div>
+  `;
+}
+
+function sessionOption(value, label, selected) {
+  return `<option value="${escapeHtml(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(label)}</option>`;
+}
+
+function renderBestHourCallout(bestHour) {
+  return `
+    <button
+      type="button"
+      class="best-hour-callout"
+      data-session-select
+      data-beach-id="${escapeHtml(bestHour.beach.id)}"
+      data-day-offset="${bestHour.dayOffset}"
+      data-hour="${bestHour.hour}"
+    >
+      <span class="material-symbols-rounded" aria-hidden="true">bolt</span>
+      <span>${escapeHtml(t("bestHourNow", formatDay(bestHour.dayOffset), formatHour(bestHour.hour), bestHour.beach.name, bestHour.score))}</span>
+    </button>
+  `;
+}
+
+function renderSessionCard(window, index) {
+  const peak = peakWindowEntry(window);
+  const scored = peak?.scored;
+  const scoreClass = pinClass(window.peakScore);
+  const slope = sessionSlopeLabel(window.slope?.tag);
+  const tide = sessionTidePhrase(window.tide);
+  const chips = [
+    slope,
+    tide,
+    Number.isFinite(window.distanceKm) ? t("sessionDistanceFromHome", formatDistance(window.distanceKm)) : "",
+  ].filter(Boolean);
+
+  return `
+    <button
+      type="button"
+      class="session-card"
+      data-session-select
+      data-beach-id="${escapeHtml(window.beach.id)}"
+      data-day-offset="${window.dayOffset}"
+      data-hour="${window.startHour}"
+      aria-label="${escapeHtml(`${window.beach.name} ${formatSessionWindowRange(window)}`)}"
+    >
+      <span class="session-score ${scoreClass}">${Math.round(window.peakScore)}</span>
+      <span class="session-card-copy">
+        <span class="session-card-top">
+          <span class="session-card-rank">#${index + 1}</span>
+          <span class="session-card-title">${escapeHtml(window.beach.name)}</span>
+          <span class="session-card-time">${escapeHtml(formatDay(window.dayOffset))} ${escapeHtml(formatSessionWindowRange(window))}</span>
+        </span>
+        <span class="session-chip-row">
+          ${chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join("")}
+        </span>
+        <span class="session-card-read">${escapeHtml(scored ? compactSessionRead(scored) : "")}</span>
+      </span>
+    </button>
+  `;
+}
+
+function buildSessionPlannerConstraints() {
+  const settings = state.sessionPlanner;
+  const home = BEACHES.find((beach) => beach.id === settings.homeBeachId);
+  const maxDistance = Number(settings.maxDistanceKm);
+  return {
+    dayOffsets: [0, 1, 2, 3],
+    intent: settings.intent,
+    homePoint: home ? { lat: home.lat, lon: home.lon } : null,
+    maxDistanceKm: Number.isFinite(maxDistance) && maxDistance > 0 ? maxDistance : null,
+    earliestHour: clamp(Number(settings.earliestHour), HOUR_MIN, HOUR_MAX),
+    latestHour: clamp(Number(settings.latestHour), HOUR_MIN, HOUR_MAX),
+    limit: SESSION_WEIGHTS.defaultLimit,
+  };
+}
+
+function updateSessionPlannerControl(control) {
+  const key = control.dataset.sessionControl;
+  if (key === "intent" && ["any", "shortboard", "longboard"].includes(control.value)) {
+    state.sessionPlanner.intent = control.value;
+  } else if (key === "homeBeachId") {
+    state.sessionPlanner.homeBeachId = BEACHES.some((beach) => beach.id === control.value)
+      ? control.value
+      : "";
+  } else if (key === "maxDistanceKm") {
+    const value = Number(control.value);
+    state.sessionPlanner.maxDistanceKm = Number.isFinite(value) && value > 0 ? String(Math.round(value)) : "";
+  } else if (key === "earliestHour" || key === "latestHour") {
+    const value = Number(control.value);
+    state.sessionPlanner[key] = Number.isFinite(value) ? clamp(Math.round(value), HOUR_MIN, HOUR_MAX) : state.sessionPlanner[key];
+  }
+  saveSessionPlannerState();
+  renderData();
+}
+
+function peakWindowEntry(window) {
+  return (window.entries ?? []).reduce((best, entry) => {
+    if (!best) return entry;
+    return entry.scored.score.score > best.scored.score.score ? entry : best;
+  }, null);
+}
+
+function formatSessionWindowRange(window) {
+  const endHour = Math.min(window.endHour + 1, HOUR_MAX + 1);
+  const joiner = state.lang === "pt" ? " a " : " to ";
+  return `${formatHour(window.startHour)}${joiner}${formatHour(endHour)}`;
+}
+
+function sessionSlopeLabel(tag) {
+  if (tag === "building") return t("sessionSlopeBuilding");
+  if (tag === "fading") return t("sessionSlopeFading");
+  return t("sessionSlopeHolding");
+}
+
+function sessionTidePhrase(tide) {
+  if (!tide) return "";
+  const phase =
+    tide.phase === "low"
+      ? t("sessionTideLow")
+      : tide.phase === "high"
+        ? t("sessionTideHigh")
+        : t("sessionTideMid");
+  const trend =
+    tide.trend === "incoming"
+      ? t("sessionTideIncoming")
+      : tide.trend === "draining"
+        ? t("sessionTideDraining")
+        : t("sessionTideSteady");
+  return t("sessionTidePhrase", phase, trend);
 }
 
 const SWELL_PROSE = {
