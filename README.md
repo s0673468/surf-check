@@ -1,8 +1,9 @@
 # Floripa Surf Check
 
 A small static site for a quick, glanceable read on how the surf is shaping up around
-Florianópolis. Built for me and a few friends — pick a day and hour, see which beaches
-are the best bets, and tap one for a plain-language detail view.
+Florianópolis. Built for me and a few friends. The app can pick ranked surf windows
+across the next four days, or you can pick a day and hour, see which beaches are the
+best bets, and tap one for a plain-language detail view.
 
 Pure HTML/CSS/JS, no build step, no API keys.
 
@@ -31,22 +32,23 @@ Then visit `http://localhost:4173`.
 Validate the static app with the same gates CI runs:
 
 ```bash
-make lint    # syntax-check all five runtime scripts
+make lint    # syntax-check all six runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
 make check   # run both gates; CI uses this
 ```
 
-`make test` runs the no-dependency smoke suite (58 tests). These cover the scoring model
+`make test` runs the no-dependency smoke suite (72 tests). These cover the scoring model
 directly — wind monotonicity across **both** speed and the offshore→onshore angle (no
 glassy cliff, no cross-shore jump), the gust gate that spares a glassy morning, the
 surfable-floor continuity and above-floor readiness ramp, size separation, the
 period-aware closeout floor, exposure-class direction capping, aligned-vs-opposed windsea
 cleanliness, missing-weather neutrality, the normalized tide state, the date-keyed scored
 cache (no midnight staleness), forecast-truth ledger parsing, and the timezone epoch —
-plus the radar, fetch-resilience, localization, and prose helpers. The suite loads the
-same classic scripts as `index.html`, in page order, so split-file script ordering stays
-covered.
+plus session-window detection, planner utility ordering, distance and board-intent
+filters, the radar, fetch-resilience, localization, and prose helpers. The suite loads
+the same classic scripts as `index.html`, in page order, so split-file script ordering
+stays covered.
 
 ## Runtime structure
 
@@ -58,6 +60,8 @@ The app deliberately stays as classic scripts with no bundler:
   reasons, and swell/wind/tide scoring helpers.
 - `forecast-selectors.js` — selected-hour forecast views, scored-sample extraction,
   memoization, rankings, nearby-beach comparisons, and tide-state normalization.
+- `session-planner.js` — pure session-window detection and ranking across beaches,
+  days, and hours, using already-cached scored samples and user constraints.
 - `rain-radar.js` — RainViewer metadata loading, frame normalization, frame matching,
   tile URL construction, and Leaflet radar layer lifecycle.
 - `app.js` — beach/profile data, localization, state, orchestration, DOM rendering,
@@ -78,6 +82,10 @@ The local forecast-truth loop stays outside the browser runtime:
   and a rain watch-out. Whole-day peak score on the left (vs. Best bets, which is the
   selected hour). Generated in-browser from the same scored samples — see `describeDay`
   in `app.js` and scored-sample extraction in `forecast-selectors.js`.
+- **Your next sessions** — a collapsible planner that ranks surf windows across all
+  beaches, the next four days, and every 06:00–18:00 forecast hour. It uses the cached
+  scored grid, with board intent, home point, max distance, and earliest/latest-hour
+  filters. No extra network calls.
 - **Best bets** — beaches ranked for the selected day/hour, with the top pick highlighted.
 - **Map** — the same scores as colored pins around the island (Leaflet + OpenStreetMap),
   plus a RainViewer rain layer when radar data exists for the selected surf hour.

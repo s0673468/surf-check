@@ -81,12 +81,13 @@ Joaquina/Lagoinha (NE is onshore for an E/SE-facing beach).
 
 ## Open Questions Before More Code Changes
 
-- Is the score meant to mean "best surf physics" or "best practical beach for us
-  today"? If it is practical, access, crowd, hazards, and driving friction should
-  become visible ranking context.
-- Should there be a board/intent mode? A `0.6 m` floor is sensible for a default
-  shortboard/funboard read, but a longboard/learner mode would intentionally grade
-  small clean surf differently.
+- Addressed in `session-planner.js`: the app now has a practical "Your next
+  sessions" planner that ranks contiguous surf windows across beaches, days, and
+  hours. It adds visible driving friction through a home point and max-distance
+  filter while keeping access, crowd, and hazards as non-numeric spot context.
+- Addressed in `session-planner.js`: the planner has a board/intent mode. The
+  score model still keeps its default surfable floor, while longboard mode lowers
+  the planner's effective window floor so small clean surf can qualify.
 - Do we trust generic public spot pages enough to change direction centers now,
   or should we collect a few local validation days first? Campeche and Santinho are
   the clearest candidates where public priors and current model centers disagree.

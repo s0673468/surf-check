@@ -54,7 +54,7 @@ Agent-facing operating notes for this repo.
 
 - [index.html](index.html) loads the classic scripts in dependency order:
   `forecast-api.js`, `score-model.js`, `forecast-selectors.js`,
-  `rain-radar.js`, then `app.js`.
+  `session-planner.js`, `rain-radar.js`, then `app.js`.
 - [app.js](app.js) owns static beach/profile data, localization, state,
   orchestration, DOM rendering, map marker rendering, and shared formatting
   helpers.
@@ -75,12 +75,14 @@ make check   # run both gates; CI uses this
 
 - `make lint` keeps the classic-script syntax gate in one place. It checks
   `forecast-api.js`, `score-model.js`, `forecast-selectors.js`,
-  `rain-radar.js`, and `app.js` in the same order as the page.
-- `make test` runs the no-dependency smoke suite (58 tests) in
+  `session-planner.js`, `rain-radar.js`, and `app.js` in the same order as the
+  page.
+- `make test` runs the no-dependency smoke suite (72 tests) in
   [tests/smoke.mjs](tests/smoke.mjs). It loads all runtime scripts in the same
   order as [index.html](index.html). If you change runtime selectors, scoring,
-  API resilience, localization, or radar helpers, add or update focused coverage
-  there. Scoring helpers that are only exercised transitively (e.g. `tideScore`,
+  API resilience, session planning, localization, or radar helpers, add or
+  update focused coverage there. Scoring helpers that are only exercised
+  transitively (e.g. `tideScore`,
   `coastalFitScore`, `surfableHeightFactor`, `numericCell`) are exported into the
   test harness for direct unit tests — keep that list in sync when you add one.
   For syntax-only confidence on a touched split file, also run `node --check <file>`.
@@ -98,4 +100,4 @@ make check   # run both gates; CI uses this
 
 - Keep [README.md](README.md) aligned with the actual validation commands and
   the current runtime split across `forecast-api.js`, `score-model.js`,
-  `forecast-selectors.js`, `rain-radar.js`, and `app.js`.
+  `forecast-selectors.js`, `session-planner.js`, `rain-radar.js`, and `app.js`.

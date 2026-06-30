@@ -12,6 +12,7 @@ const runtimeSources = [
   "forecast-api.js",
   "score-model.js",
   "forecast-selectors.js",
+  "session-planner.js",
   "rain-radar.js",
   "app.js",
 ].map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -56,6 +57,12 @@ globalThis.__surfCheckTest = {
   getNearbyScoredBeachEntries,
   getScoredBeachEntries,
   getScoredTimeline,
+  SESSION_WEIGHTS,
+  detectWindows,
+  classifyWindowSlope,
+  summarizeTideProgression,
+  scoreWindow,
+  planSessions,
   buildRadarTileUrl,
   findClosestRadarFrameIndex,
   normalizeRadarFrames,
@@ -242,6 +249,57 @@ function cleanAlignedSample(beach, { height = 1.2, period = 12 } = {}) {
   };
 }
 
+function plannerCell(hour, score, options = {}) {
+  const beach = options.beach ?? surf.BEACHES.find((item) => item.id === "joaquina");
+  const sample = {
+    ...cleanAlignedSample(beach, {
+      height: options.height ?? 1.2,
+      period: options.period ?? 12,
+    }),
+    tideState: options.tideState ?? beach.idealTide,
+    seaLevel: options.seaLevel ?? 0,
+    nextSeaLevel: options.nextSeaLevel ?? 0.03,
+    windDirection: options.windDirection ?? beach.offshoreWind,
+    swellDirection: options.swellDirection ?? beach.swellCenter,
+  };
+  return {
+    hour,
+    scored: {
+      beach,
+      sample,
+      score: {
+        score,
+        label: String(score),
+        confidence: 90,
+        parts: {
+          swell: options.swellPart ?? score,
+          wind: options.windPart ?? 80,
+          coastal: options.coastalPart ?? 75,
+          tide: options.tidePart ?? 80,
+          weather: options.weatherPart ?? 80,
+        },
+        detail: {
+          breakingHeight: options.height ?? 1.2,
+          minSurfHeight: surf.surfableHeightFloor(beach),
+          cleanFun: options.cleanFun ?? 0,
+        },
+        windQuality: "light offshore",
+        tideTrend: "Rising",
+        tideQuality: "Good",
+        reasons: [],
+      },
+    },
+  };
+}
+
+function plannerWindow(scores, options = {}) {
+  const start = options.startHour ?? 8;
+  return surf.detectWindows(
+    scores.map((score, index) => plannerCell(start + index, score, options)),
+    { tierFloor: options.tierFloor ?? 52 },
+  )[0];
+}
+
 async function withMockedBrowserIO({ fetch, setTimeout }, run) {
   const originalFetch = context.fetch;
   const originalSetTimeout = context.window.setTimeout;
@@ -308,6 +366,191 @@ test("timeline and nearby selectors keep beach context", () => {
       (entry, index, entries) => index === 0 || entries[index - 1].distance <= entry.distance,
     ),
   );
+});
+
+test("session windows include a single qualifying hour", () => {
+  const windows = surf.detectWindows([
+    plannerCell(8, 51),
+    plannerCell(9, 55),
+    plannerCell(10, 50),
+  ], { tierFloor: 52 });
+
+  assert.equal(windows.length, 1);
+  assert.equal(windows[0].startHour, 9);
+  assert.equal(windows[0].endHour, 9);
+  assert.equal(windows[0].lengthHours, 1);
+  assert.deepEqual(Array.from(windows[0].hours), [9]);
+});
+
+test("session windows merge contiguous qualifying hours", () => {
+  const windows = surf.detectWindows([
+    plannerCell(7, 48),
+    plannerCell(8, 60),
+    plannerCell(9, 66),
+    plannerCell(10, 69),
+    plannerCell(11, 45),
+  ], { tierFloor: 52 });
+
+  assert.equal(windows.length, 1);
+  assert.deepEqual(Array.from(windows[0].hours), [8, 9, 10]);
+  assert.equal(windows[0].peakScore, 69);
+  assert.equal(windows[0].meanScore, 65);
+});
+
+test("session windows split on a sub-floor gap", () => {
+  const windows = surf.detectWindows([
+    plannerCell(8, 58),
+    plannerCell(9, 49),
+    plannerCell(10, 62),
+  ], { tierFloor: 52 });
+
+  assert.equal(windows.length, 2);
+  assert.deepEqual(Array.from(windows, (window) => Array.from(window.hours)), [[8], [10]]);
+});
+
+test("session windows degrade cleanly for empty or sub-floor timelines", () => {
+  assert.equal(surf.detectWindows([], { tierFloor: 52 }).length, 0);
+  assert.equal(surf.detectWindows([
+    plannerCell(8, 30),
+    plannerCell(9, 51),
+  ], { tierFloor: 52 }).length, 0);
+});
+
+test("session slope tags rising, flat, and blown-out windows", () => {
+  assert.equal(surf.classifyWindowSlope([54, 61, 68], { tierFloor: 52 }).tag, "building");
+  assert.equal(surf.classifyWindowSlope([61, 62, 61], { tierFloor: 52 }).tag, "holding");
+
+  const fading = surf.classifyWindowSlope([70, 66, 49], { tierFloor: 52 });
+  assert.equal(fading.tag, "fading");
+  assert.equal(fading.blowout, true);
+});
+
+test("session tide summary rewards windows near the beach tide", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const close = surf.detectWindows([
+    plannerCell(8, 62, { beach, tideState: 0.35 }),
+    plannerCell(9, 64, { beach, tideState: 0.4 }),
+    plannerCell(10, 63, { beach, tideState: 0.45 }),
+  ], { tierFloor: 52 })[0];
+  const far = surf.detectWindows([
+    plannerCell(8, 62, { beach, tideState: 0.95 }),
+    plannerCell(9, 64, { beach, tideState: 0.9 }),
+    plannerCell(10, 63, { beach, tideState: 0.85 }),
+  ], { tierFloor: 52 })[0];
+
+  const closeSummary = surf.summarizeTideProgression(close, beach);
+  const farSummary = surf.summarizeTideProgression(far, beach);
+
+  assert.equal(closeSummary.trend, "incoming");
+  assert.ok(closeSummary.fit > farSummary.fit);
+});
+
+test("session utility prefers a sustained window over a spike", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const sustained = plannerWindow([70, 70, 70], { beach });
+  const spike = plannerWindow([70], { beach });
+
+  assert.ok(
+    surf.scoreWindow(sustained, beach, {}) > surf.scoreWindow(spike, beach, {}),
+  );
+});
+
+test("session utility penalizes a blown-out session", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const holding = plannerWindow([66, 66, 66], { beach });
+  const fading = {
+    ...plannerWindow([66, 63, 60], { beach }),
+    slope: { tag: "fading", slope: -3, blowout: true },
+  };
+
+  assert.ok(
+    surf.scoreWindow(holding, beach, {}) > surf.scoreWindow(fading, beach, {}),
+  );
+});
+
+test("session utility prefers a closer beach when physics are equal", () => {
+  const near = surf.BEACHES.find((item) => item.id === "joaquina");
+  const far = surf.BEACHES.find((item) => item.id === "brava");
+  const homePoint = { lat: near.lat, lon: near.lon };
+  const nearWindow = plannerWindow([68, 68], { beach: near });
+  const farWindow = plannerWindow([68, 68], { beach: far });
+
+  assert.ok(
+    surf.scoreWindow(nearWindow, near, { homePoint }) >
+      surf.scoreWindow(farWindow, far, { homePoint }),
+  );
+});
+
+test("session planner trims and excludes by earliest and latest hour", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const grid = [{
+    beach,
+    dayOffset: 0,
+    timeline: [7, 8, 9, 10].map((hour) => plannerCell(hour, 64, { beach })),
+  }];
+
+  const trimmed = surf.planSessions(grid, { earliestHour: 8, latestHour: 9 });
+  assert.equal(trimmed.windows.length, 1);
+  assert.deepEqual(Array.from(trimmed.windows[0].hours), [8, 9]);
+
+  const excluded = surf.planSessions(grid, { earliestHour: 11, latestHour: 12 });
+  assert.equal(excluded.windows.length, 0);
+});
+
+test("session planner gates distant beaches when a home point is set", () => {
+  const near = surf.BEACHES.find((item) => item.id === "joaquina");
+  const far = surf.BEACHES.find((item) => item.id === "brava");
+  const grid = [near, far].map((beach) => ({
+    beach,
+    dayOffset: 0,
+    timeline: [8, 9].map((hour) => plannerCell(hour, 66, { beach })),
+  }));
+
+  const plan = surf.planSessions(grid, {
+    homePoint: { lat: near.lat, lon: near.lon },
+    maxDistanceKm: 3,
+  });
+
+  assert.ok(plan.windows.length > 0);
+  assert.ok(plan.windows.every((window) => window.beach.id === near.id));
+});
+
+test("session planner intent shifts which marginal windows qualify", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const grid = [{
+    beach,
+    dayOffset: 0,
+    timeline: [8, 9].map((hour) =>
+      plannerCell(hour, 48, { beach, height: surf.surfableHeightFloor(beach) - 0.05, cleanFun: 0.18 }),
+    ),
+  }];
+
+  assert.equal(surf.planSessions(grid, { intent: "shortboard" }).windows.length, 0);
+  assert.ok(surf.planSessions(grid, { intent: "longboard" }).windows.length > 0);
+});
+
+test("session planner returns an empty plan for an empty grid", () => {
+  const plan = surf.planSessions([], {});
+  assert.equal(plan.windows.length, 0);
+  assert.equal(plan.bestHour, null);
+});
+
+test("session planner returns the best single-hour callout", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const grid = [{
+    beach,
+    dayOffset: 0,
+    timeline: [
+      plannerCell(8, 58, { beach }),
+      plannerCell(9, 74, { beach }),
+    ],
+  }];
+
+  const plan = surf.planSessions(grid, {});
+
+  assert.equal(plan.bestHour.hour, 9);
+  assert.equal(plan.bestHour.beach.id, beach.id);
+  assert.equal(plan.bestHour.score, 74);
 });
 
 test("scored samples align weather, marine, and next tide by timestamp", () => {
