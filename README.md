@@ -32,7 +32,7 @@ Then visit `http://localhost:4173`.
 Validate the static app with the same gates CI runs:
 
 ```bash
-make lint    # syntax-check all six runtime scripts
+make lint    # syntax-check all seven runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
 make check   # run both gates; CI uses this
@@ -61,10 +61,12 @@ The app deliberately stays as classic scripts with no bundler:
   reasons, and swell/wind/tide scoring helpers.
 - `forecast-selectors.js` — selected-hour forecast views, scored-sample extraction,
   memoization, rankings, nearby-beach comparisons, and tide-state normalization.
+- `forecast-prose.js` — day summaries, spot reads, metric explanations,
+  nearby-spot contrast reasons, factor labels, and confidence-chip metadata.
 - `rain-radar.js` — RainViewer metadata loading, frame normalization, frame matching,
   tile URL construction, and Leaflet radar layer lifecycle.
 - `app.js` — localization accessors, state, orchestration, DOM rendering, map
-  marker rendering, day/spot prose, and shared formatting helpers.
+  marker rendering, and shared formatting helpers.
 
 The local forecast-truth loop stays outside the browser runtime:
 

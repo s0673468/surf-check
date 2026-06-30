@@ -55,13 +55,16 @@ Agent-facing operating notes for this repo.
 
 - [index.html](index.html) loads the classic scripts in dependency order:
   `surf-config.js`, `forecast-api.js`, `score-model.js`,
-  `forecast-selectors.js`, `rain-radar.js`, then `app.js`.
+  `forecast-selectors.js`, `forecast-prose.js`, `rain-radar.js`, then
+  `app.js`.
 - [surf-config.js](surf-config.js) owns static beach/profile data, localized
   static dictionaries, shared time-window constants, and the spot-profile
   lookup.
+- [forecast-prose.js](forecast-prose.js) owns day summaries, spot reads,
+  metric explanations, nearby-spot contrast reasons, factor labels, and
+  confidence-chip metadata.
 - [app.js](app.js) owns localization accessors, state, orchestration, DOM
-  rendering, map marker rendering, day/spot prose, and shared formatting
-  helpers.
+  rendering, map marker rendering, and shared formatting helpers.
 - [tests/smoke.mjs](tests/smoke.mjs) mirrors the same script order before
   exporting runtime helpers for direct tests.
 
@@ -71,7 +74,7 @@ Agent-facing operating notes for this repo.
 - The canonical local gates are:
 
 ```bash
-make lint    # syntax-check all six runtime scripts
+make lint    # syntax-check all seven runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
 make check   # run both gates; CI uses this
@@ -79,8 +82,8 @@ make check   # run both gates; CI uses this
 
 - `make lint` keeps the classic-script syntax gate in one place. It checks
   `surf-config.js`, `forecast-api.js`, `score-model.js`,
-  `forecast-selectors.js`, `rain-radar.js`, and `app.js` in the same order as
-  the page.
+  `forecast-selectors.js`, `forecast-prose.js`, `rain-radar.js`, and `app.js`
+  in the same order as the page.
 - `make test` runs the no-dependency smoke suite in
   [tests/smoke.mjs](tests/smoke.mjs). It loads all runtime scripts in the same
   order as [index.html](index.html). If you change runtime selectors, scoring,
@@ -104,4 +107,5 @@ make check   # run both gates; CI uses this
 
 - Keep [README.md](README.md) aligned with the actual validation commands and
   the current runtime split across `surf-config.js`, `forecast-api.js`,
-  `score-model.js`, `forecast-selectors.js`, `rain-radar.js`, and `app.js`.
+  `score-model.js`, `forecast-selectors.js`, `forecast-prose.js`,
+  `rain-radar.js`, and `app.js`.
