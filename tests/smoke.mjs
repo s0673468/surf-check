@@ -100,6 +100,7 @@ test("runtime script lists match page order", () => {
 
   assert.deepEqual(runtimeScriptFiles, [
     "surf-config.js",
+    "runtime-utils.js",
     "forecast-api.js",
     "score-model.js",
     "forecast-selectors.js",
