@@ -32,7 +32,7 @@ Then visit `http://localhost:4173`.
 Validate the static app with the same gates CI runs:
 
 ```bash
-make lint    # syntax-check all five runtime scripts
+make lint    # syntax-check all six runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
 make check   # run both gates; CI uses this
@@ -53,6 +53,8 @@ stays covered.
 
 The app deliberately stays as classic scripts with no bundler:
 
+- `surf-config.js` — surf-region config, beach/profile data, localized static
+  dictionaries, shared time-window constants, and the spot-profile lookup.
 - `forecast-api.js` — Open-Meteo hourly field lists, beach forecast URL construction,
   payload validation, shared `fetchJson` retry behavior, and delay handling.
 - `score-model.js` — the 0–100 scoring model, score tiers, score labels, scoring
@@ -61,8 +63,8 @@ The app deliberately stays as classic scripts with no bundler:
   memoization, rankings, nearby-beach comparisons, and tide-state normalization.
 - `rain-radar.js` — RainViewer metadata loading, frame normalization, frame matching,
   tile URL construction, and Leaflet radar layer lifecycle.
-- `app.js` — beach/profile data, localization, state, orchestration, DOM rendering,
-  map marker rendering, day/spot prose, and shared formatting helpers.
+- `app.js` — localization accessors, state, orchestration, DOM rendering, map
+  marker rendering, day/spot prose, and shared formatting helpers.
 
 The local forecast-truth loop stays outside the browser runtime:
 
@@ -210,7 +212,7 @@ The site then serves at `https://<owner>.github.io/<name>/`.
 
 ## Calibration
 
-The per-beach `BEACHES` config in `app.js` was calibrated against source-backed priors
+The per-beach `BEACHES` config in `surf-config.js` was calibrated against source-backed priors
 (Surf-Forecast per-break "ideal swell + offshore wind", a local PT guide, Wikipedia) and
 adversarially fact-checked for geographic plausibility. Notable corrections: **Campeche**
 faces south (swell from ~174°, not ESE); **Barra da Lagoa** behaves like a north-shore

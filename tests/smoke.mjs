@@ -8,13 +8,14 @@ import {
   loadTruthLedgerFromFile,
 } from "../scripts/forecast-truth.mjs";
 
-const runtimeSources = [
-  "forecast-api.js",
-  "score-model.js",
-  "forecast-selectors.js",
-  "rain-radar.js",
-  "app.js",
-].map((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
+const indexHtml = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const runtimeScriptFiles = Array.from(
+  indexHtml.matchAll(/<script\b[^>]*\bsrc="\.\/([^"]+\.js)"[^>]*><\/script>/g),
+  (match) => match[1],
+);
+const runtimeSources = runtimeScriptFiles.map((file) =>
+  readFileSync(new URL(`../${file}`, import.meta.url), "utf8"),
+);
 const context = {
   console,
   URL,
@@ -82,6 +83,24 @@ globalThis.__surfCheckTest = {
 );
 
 const surf = context.__surfCheckTest;
+
+test("runtime script lists match page order", () => {
+  const makefile = readFileSync(new URL("../Makefile", import.meta.url), "utf8");
+  const lintScripts = makefile
+    .match(/^RUNTIME_SCRIPTS := (.+)$/m)?.[1]
+    .trim()
+    .split(/\s+/);
+
+  assert.deepEqual(runtimeScriptFiles, [
+    "surf-config.js",
+    "forecast-api.js",
+    "score-model.js",
+    "forecast-selectors.js",
+    "rain-radar.js",
+    "app.js",
+  ]);
+  assert.deepEqual(lintScripts, runtimeScriptFiles);
+});
 
 function markdownFilesUnder(relativeDir) {
   return readdirSync(new URL(`../${relativeDir}/`, import.meta.url), {
