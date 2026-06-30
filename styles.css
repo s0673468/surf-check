@@ -271,8 +271,7 @@ h1 {
 .best-bets,
 .map-panel,
 .side-panel,
-.timeline-panel,
-.next-sessions {
+.timeline-panel {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
@@ -574,248 +573,6 @@ h1 {
   font-weight: 600;
   line-height: 1.5;
   margin: 0;
-}
-
-/* ---------- Next sessions ---------- */
-.next-sessions {
-  overflow: hidden;
-}
-
-.next-sessions[hidden] {
-  display: none;
-}
-
-.next-sessions-details {
-  display: grid;
-}
-
-.next-sessions-details > summary {
-  cursor: pointer;
-  list-style: none;
-  padding: var(--space-md) var(--space-lg);
-}
-
-.next-sessions-details > summary::-webkit-details-marker {
-  display: none;
-}
-
-.session-summary-head {
-  align-items: center;
-  margin-bottom: 0;
-}
-
-.session-summary-head > span:first-child {
-  align-items: center;
-  color: var(--fg1);
-  display: inline-flex;
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  font-weight: 700;
-  gap: 9px;
-}
-
-.session-summary-head > span:first-child::before {
-  background: linear-gradient(180deg, var(--accent) 0%, rgba(45, 212, 191, 0.2) 100%);
-  border-radius: 2px;
-  content: "";
-  height: 20px;
-  width: 4px;
-}
-
-.session-planner-body {
-  border-top: 1px solid var(--border);
-  display: grid;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg) var(--space-lg);
-}
-
-.session-controls {
-  align-items: end;
-  display: grid;
-  gap: var(--space-sm);
-  grid-template-columns:
-    minmax(150px, 1fr)
-    minmax(220px, 1.35fr)
-    max-content
-    repeat(2, minmax(94px, 0.55fr));
-}
-
-.session-field {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.session-field span {
-  color: var(--fg2);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-}
-
-.session-field select,
-.session-field input {
-  background: var(--panel-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-input);
-  color: var(--fg1);
-  font: inherit;
-  font-weight: 700;
-  min-height: 42px;
-  min-width: 0;
-  padding: 0 12px;
-  width: 100%;
-}
-
-.session-set-home {
-  align-items: center;
-  background: var(--accent-soft);
-  border: 1px solid rgba(45, 212, 191, 0.4);
-  border-radius: var(--radius-input);
-  color: var(--fg1);
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 800;
-  gap: 7px;
-  justify-content: center;
-  min-height: 42px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.session-set-home .material-symbols-rounded {
-  color: var(--accent);
-  font-size: 18px;
-}
-
-.best-hour-callout {
-  align-items: center;
-  background: rgba(45, 212, 191, 0.12);
-  border: 1px solid rgba(45, 212, 191, 0.35);
-  border-radius: var(--radius-panel);
-  color: var(--fg1);
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  font-weight: 800;
-  gap: 10px;
-  justify-content: flex-start;
-  line-height: 1.35;
-  padding: 12px 14px;
-  text-align: left;
-  width: 100%;
-}
-
-.best-hour-callout .material-symbols-rounded {
-  color: var(--yellow);
-  font-size: 20px;
-}
-
-.session-card-list {
-  display: grid;
-  gap: var(--space-sm);
-  grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
-}
-
-.session-card {
-  align-items: start;
-  background: var(--panel-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel);
-  cursor: pointer;
-  display: grid;
-  gap: var(--space-sm);
-  grid-template-columns: 48px minmax(0, 1fr);
-  min-height: 196px;
-  min-width: 0;
-  padding: 12px;
-  text-align: left;
-  transition:
-    border-color 140ms ease,
-    transform 140ms ease;
-}
-
-.session-card:hover {
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-
-.session-score {
-  align-items: center;
-  border-radius: var(--radius-sm);
-  color: #fff;
-  display: flex;
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 900;
-  height: 48px;
-  justify-content: center;
-  width: 48px;
-}
-
-.session-card-copy {
-  display: grid;
-  gap: 7px;
-  grid-template-rows: auto auto 1fr;
-  height: 100%;
-  min-width: 0;
-}
-
-.session-card-top {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.session-card-rank {
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 800;
-}
-
-.session-card-title {
-  color: var(--fg1);
-  font-family: var(--font-display);
-  font-size: 0.98rem;
-  font-weight: 800;
-  line-height: 1.12;
-  overflow-wrap: anywhere;
-}
-
-.session-card-time {
-  color: var(--fg3);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.session-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.session-chip-row span {
-  background: var(--panel-soft);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-pill);
-  color: var(--fg2);
-  font-size: 0.68rem;
-  font-weight: 800;
-  line-height: 1.2;
-  padding: 4px 8px;
-}
-
-.session-card-read {
-  color: var(--fg2);
-  font-size: 0.78rem;
-  line-height: 1.35;
-  overflow: hidden;
 }
 
 /* ---------- Hero grid (best bets + map) ---------- */
@@ -1643,15 +1400,6 @@ h1 {
     max-height: none;
   }
 
-  .session-controls,
-  .session-card-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .session-set-home {
-    width: 100%;
-  }
-
   .map-panel,
   .map,
   .fallback-map {
@@ -1719,22 +1467,6 @@ h1 {
     white-space: normal;
   }
 
-  .next-sessions-details > summary,
-  .session-planner-body {
-    padding-left: var(--space-md);
-    padding-right: var(--space-md);
-  }
-
-  .session-summary-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .session-controls,
-  .session-card-list {
-    grid-template-columns: 1fr;
-  }
-
   .summary-top {
     align-items: stretch;
     flex-direction: column;
@@ -1784,9 +1516,6 @@ h1 {
    shadow ring instead. */
 .row-score:focus-visible,
 .bet-hero:focus-visible,
-.best-hour-callout:focus-visible,
-.session-card:focus-visible,
-.session-set-home:focus-visible,
 .contrast-item:focus-visible,
 .time-bar:focus-visible,
 .map-pin:focus-visible {
