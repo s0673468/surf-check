@@ -84,8 +84,8 @@ The local forecast-truth loop stays outside the browser runtime:
   in `app.js` and scored-sample extraction in `forecast-selectors.js`.
 - **Your next sessions** — a collapsible planner that ranks surf windows across all
   beaches, the next four days, and every 06:00–18:00 forecast hour. It uses the cached
-  scored grid, with board intent, home point, max distance, and earliest/latest-hour
-  filters. No extra network calls.
+  scored grid, with board intent, home point, and earliest/latest-hour filters. The
+  whole island stays in range. No extra network calls.
 - **Best bets** — beaches ranked for the selected day/hour, with the top pick highlighted.
 - **Map** — the same scores as colored pins around the island (Leaflet + OpenStreetMap),
   plus a RainViewer rain layer when radar data exists for the selected surf hour.

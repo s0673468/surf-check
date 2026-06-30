@@ -372,7 +372,6 @@ const state = {
   sessionPlanner: {
     intent: "any",
     homeBeachId: "",
-    maxDistanceKm: "",
     earliestHour: HOUR_MIN,
     latestHour: HOUR_MAX,
     open: true,
@@ -411,7 +410,6 @@ const UI = {
     sessionHome: "Saindo de",
     sessionNoHome: "Sem ponto",
     sessionSetHome: "Usar selecionada",
-    sessionMaxDistance: "Máx km",
     sessionEarliest: "Depois de",
     sessionLatest: "Até",
     sessionSlopeBuilding: "subindo",
@@ -486,7 +484,6 @@ const UI = {
     sessionHome: "From",
     sessionNoHome: "No home",
     sessionSetHome: "Use selected",
-    sessionMaxDistance: "Max km",
     sessionEarliest: "After",
     sessionLatest: "Until",
     sessionSlopeBuilding: "building",
@@ -670,7 +667,6 @@ function defaultSessionPlannerState() {
   return {
     intent: "any",
     homeBeachId: "",
-    maxDistanceKm: "",
     earliestHour: HOUR_MIN,
     latestHour: HOUR_MAX,
     open: true,
@@ -694,12 +690,10 @@ function loadSessionPlannerState() {
     : "";
   const earliestHour = clamp(Number(parsed.earliestHour), HOUR_MIN, HOUR_MAX);
   const latestHour = clamp(Number(parsed.latestHour), HOUR_MIN, HOUR_MAX);
-  const maxDistance = Number(parsed.maxDistanceKm);
 
   return {
     intent,
     homeBeachId,
-    maxDistanceKm: Number.isFinite(maxDistance) && maxDistance > 0 ? String(maxDistance) : "",
     earliestHour: Number.isFinite(earliestHour) ? earliestHour : fallback.earliestHour,
     latestHour: Number.isFinite(latestHour) ? latestHour : fallback.latestHour,
     open: typeof parsed.open === "boolean" ? parsed.open : fallback.open,
@@ -1687,10 +1681,6 @@ function renderSessionPlannerControls() {
         <span>${escapeHtml(t("sessionSetHome"))}</span>
       </button>
       <label class="session-field session-number-field">
-        <span>${escapeHtml(t("sessionMaxDistance"))}</span>
-        <input data-session-control="maxDistanceKm" type="number" min="1" max="80" step="1" value="${escapeHtml(settings.maxDistanceKm)}" inputmode="numeric" />
-      </label>
-      <label class="session-field session-number-field">
         <span>${escapeHtml(t("sessionEarliest"))}</span>
         <input data-session-control="earliestHour" type="number" min="${HOUR_MIN}" max="${HOUR_MAX}" step="1" value="${settings.earliestHour}" inputmode="numeric" />
       </label>
@@ -1763,12 +1753,10 @@ function renderSessionCard(window, index) {
 function buildSessionPlannerConstraints() {
   const settings = state.sessionPlanner;
   const home = BEACHES.find((beach) => beach.id === settings.homeBeachId);
-  const maxDistance = Number(settings.maxDistanceKm);
   return {
     dayOffsets: [0, 1, 2, 3],
     intent: settings.intent,
     homePoint: home ? { lat: home.lat, lon: home.lon } : null,
-    maxDistanceKm: Number.isFinite(maxDistance) && maxDistance > 0 ? maxDistance : null,
     earliestHour: clamp(Number(settings.earliestHour), HOUR_MIN, HOUR_MAX),
     latestHour: clamp(Number(settings.latestHour), HOUR_MIN, HOUR_MAX),
     limit: SESSION_WEIGHTS.defaultLimit,
@@ -1783,9 +1771,6 @@ function updateSessionPlannerControl(control) {
     state.sessionPlanner.homeBeachId = BEACHES.some((beach) => beach.id === control.value)
       ? control.value
       : "";
-  } else if (key === "maxDistanceKm") {
-    const value = Number(control.value);
-    state.sessionPlanner.maxDistanceKm = Number.isFinite(value) && value > 0 ? String(Math.round(value)) : "";
   } else if (key === "earliestHour" || key === "latestHour") {
     const value = Number(control.value);
     state.sessionPlanner[key] = Number.isFinite(value) ? clamp(Math.round(value), HOUR_MIN, HOUR_MAX) : state.sessionPlanner[key];
