@@ -359,7 +359,7 @@ test("timeline and nearby selectors keep beach context", () => {
     timeline.map((entry) => entry.hour),
     surf.HOURS,
   );
-  assert.equal(nearby.length, 3);
+  assert.equal(nearby.length, 4);
   assert.ok(nearby.every((entry) => entry.beach.id !== beach.id));
   assert.ok(
     nearby.every(

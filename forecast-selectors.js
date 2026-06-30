@@ -35,7 +35,7 @@ function getScoredTimeline(beach, dayOffset) {
   })).filter((entry) => entry.scored);
 }
 
-function getNearbyScoredBeachEntries(beach, dayOffset, hour, limit = 3) {
+function getNearbyScoredBeachEntries(beach, dayOffset, hour, limit = 4) {
   return getScoredBeachEntries(
     dayOffset,
     hour,
