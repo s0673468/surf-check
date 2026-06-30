@@ -1,6 +1,7 @@
 {
   "scripts": {
     "forecast-truth": "node scripts/forecast-truth.mjs calibration/forecast-truth-ledger.json",
-    "test": "node --test tests/smoke.mjs"
+    "test": "node --test tests/smoke.mjs tests/mutation-smoke.mjs",
+    "test:mutations": "node --test tests/mutation-smoke.mjs"
   }
 }

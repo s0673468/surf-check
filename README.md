@@ -29,17 +29,19 @@ Then visit `http://localhost:4173`.
 
 ## Test
 
-Validate the static app with the same gates CI runs:
+Validate the static app with the same gates that CI runs:
 
 ```bash
 make lint    # syntax-check all eight runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
+make test-mutations  # run only the focused mutation smoke
 make check   # run both gates; CI uses this
 ```
 
-`make test` runs the no-dependency smoke suite. These cover the scoring model
-directly — wind monotonicity across **both** speed and the offshore→onshore angle (no
+`make test` runs the no-dependency smoke suite plus a focused mutation smoke. These
+cover the scoring model
+directly: wind monotonicity across both speed and the offshore-to-onshore angle (no
 glassy cliff, no cross-shore jump), the gust gate that spares a glassy morning, the
 surfable-floor continuity and above-floor readiness ramp, size separation, the
 period-aware closeout floor, exposure-class direction capping, aligned-vs-opposed windsea
@@ -47,7 +49,9 @@ cleanliness, missing-weather neutrality, the normalized tide state, the date-key
 cache (no midnight staleness), forecast-truth ledger parsing, the timezone epoch,
 the radar, fetch-resilience, localization, and prose helpers. The suite loads
 the same classic scripts as `index.html`, in page order, so split-file script ordering
-stays covered.
+stays covered. The mutation smoke edits exact source lines in memory and proves the
+focused invariants catch representative comparator, fallback, cache-key, numeric,
+geometry, weather, radar, and prose-threshold mutants without adding dependencies.
 
 ## Runtime structure
 
