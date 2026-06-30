@@ -633,7 +633,11 @@ h1 {
   align-items: end;
   display: grid;
   gap: var(--space-sm);
-  grid-template-columns: 1fr 1.35fr auto 0.62fr 0.62fr 0.62fr;
+  grid-template-columns:
+    minmax(150px, 1fr)
+    minmax(220px, 1.35fr)
+    max-content
+    repeat(2, minmax(94px, 0.55fr));
 }
 
 .session-field {
@@ -713,7 +717,7 @@ h1 {
 .session-card-list {
   display: grid;
   gap: var(--space-sm);
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
 }
 
 .session-card {
@@ -724,7 +728,8 @@ h1 {
   cursor: pointer;
   display: grid;
   gap: var(--space-sm);
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
+  min-height: 196px;
   min-width: 0;
   padding: 12px;
   text-align: left;
@@ -746,14 +751,16 @@ h1 {
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 900;
-  height: 42px;
+  height: 48px;
   justify-content: center;
-  width: 42px;
+  width: 48px;
 }
 
 .session-card-copy {
   display: grid;
   gap: 7px;
+  grid-template-rows: auto auto 1fr;
+  height: 100%;
   min-width: 0;
 }
 
@@ -808,6 +815,7 @@ h1 {
   color: var(--fg2);
   font-size: 0.78rem;
   line-height: 1.35;
+  overflow: hidden;
 }
 
 /* ---------- Hero grid (best bets + map) ---------- */

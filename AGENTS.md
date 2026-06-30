@@ -67,7 +67,7 @@ Agent-facing operating notes for this repo.
 - The canonical local gates are:
 
 ```bash
-make lint    # syntax-check all five runtime scripts
+make lint    # syntax-check all six runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
 make check   # run both gates; CI uses this
