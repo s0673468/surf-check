@@ -36,11 +36,13 @@ make lint    # syntax-check all eight runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
 make test-mutations  # run only the focused mutation smoke
+npm run test:property       # run the deterministic property/fuzz suite
+npm run test:property:deep  # run 1000 generated examples locally
 make check   # run both gates; CI uses this
 ```
 
-`make test` runs the no-dependency smoke suite plus a focused mutation smoke. These
-cover the scoring model
+`make test` runs the no-dependency smoke suite, focused mutation smoke, and the
+deterministic property/fuzz suite. These cover the scoring model
 directly: wind monotonicity across both speed and the offshore-to-onshore angle (no
 glassy cliff, no cross-shore jump), the gust gate that spares a glassy morning, the
 surfable-floor continuity and above-floor readiness ramp, size separation, the
@@ -52,6 +54,8 @@ the same classic scripts as `index.html`, in page order, so split-file script or
 stays covered. The mutation smoke edits exact source lines in memory and proves the
 focused invariants catch representative comparator, fallback, cache-key, numeric,
 geometry, weather, radar, and prose-threshold mutants without adding dependencies.
+The property suite uses a reproducible CI profile by default (`SURF_PROPERTY_EXAMPLES=80`)
+and a local deep profile (`SURF_PROPERTY_EXAMPLES=1000`) for longer fuzz hunts.
 
 ## Runtime structure
 
