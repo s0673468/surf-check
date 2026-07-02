@@ -478,15 +478,25 @@ test("forecast truth ledger corruption is caught or rejected cleanly", () => {
     for (const [name, text] of corruptionsFor(validText)) {
       const path = join(directory, `${name}.json`);
       writeFileSync(path, text, "utf8");
+      let ledger = null;
+      let loadError = null;
       try {
-        const ledger = loadTruthLedgerFromFile(path);
-        if (name === "crlf") {
-          assert.deepEqual(analyzeTruthLedger(ledger), analyzeTruthLedger(validLedger()));
-        } else {
-          assert.throws(() => analyzeTruthLedger(ledger), Error, `${name} must not analyze as plausible data`);
-        }
+        ledger = loadTruthLedgerFromFile(path);
       } catch (error) {
-        assert.ok(error instanceof Error, `${name} must fail with Error`);
+        loadError = error;
+      }
+
+      if (name === "crlf") {
+        assert.ifError(loadError);
+        assert.deepEqual(analyzeTruthLedger(ledger), analyzeTruthLedger(validLedger()));
+      } else if (loadError) {
+        assert.ok(loadError instanceof Error, `${name} must fail with Error`);
+      } else {
+        assert.throws(
+          () => analyzeTruthLedger(ledger),
+          Error,
+          `${name} must not analyze as plausible data`,
+        );
       }
     }
   } finally {
