@@ -231,7 +231,12 @@ test(
         }
       });
     } finally {
-      page.close();
+      try {
+        await page.send("Browser.close");
+      } catch (error) {
+        // The browser may close the CDP socket before acknowledging the command.
+      }
+      await page.close();
       await browser.close();
       await server.close();
     }
@@ -297,9 +302,9 @@ async function launchChrome(chromePath) {
 }
 
 async function connectPage(debugPort) {
-  const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then((response) =>
-    response.json(),
-  );
+  const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`, {
+    signal: AbortSignal.timeout(5_000),
+  }).then((response) => response.json());
   const target = targets.find((candidate) => candidate.type === "page");
   assert.ok(target?.webSocketDebuggerUrl, "Chrome page target is unavailable");
   return CdpSession.connect(target.webSocketDebuggerUrl);
@@ -317,10 +322,15 @@ class CdpSession {
 
   static async connect(url) {
     const socket = new WebSocket(url);
-    await new Promise((resolvePromise, rejectPromise) => {
-      socket.addEventListener("open", resolvePromise, { once: true });
-      socket.addEventListener("error", rejectPromise, { once: true });
-    });
+    await Promise.race([
+      new Promise((resolvePromise, rejectPromise) => {
+        socket.addEventListener("open", resolvePromise, { once: true });
+        socket.addEventListener("error", rejectPromise, { once: true });
+      }),
+      new Promise((_, rejectPromise) =>
+        setTimeout(() => rejectPromise(new Error("Timed out connecting to Chrome DevTools")), 5_000),
+      ),
+    ]);
     return new CdpSession(socket);
   }
 
@@ -342,7 +352,20 @@ class CdpSession {
     if (this.failure) return Promise.reject(this.failure);
     const id = this.nextId++;
     return new Promise((resolvePromise, rejectPromise) => {
-      this.pending.set(id, { resolve: resolvePromise, reject: rejectPromise });
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        rejectPromise(new Error(`Timed out waiting for Chrome DevTools method ${method}`));
+      }, 10_000);
+      this.pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timeout);
+          resolvePromise(value);
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          rejectPromise(error);
+        },
+      });
       this.socket.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -376,8 +399,16 @@ class CdpSession {
     }, timeoutMs, `Timed out waiting for: ${expression}`);
   }
 
-  close() {
+  async close() {
+    if (this.socket.readyState === WebSocket.CLOSED) return;
+    const closed = new Promise((resolvePromise) =>
+      this.socket.addEventListener("close", resolvePromise, { once: true }),
+    );
     this.socket.close();
+    await Promise.race([
+      closed,
+      new Promise((resolvePromise) => setTimeout(resolvePromise, 1_000)),
+    ]);
   }
 }
 
