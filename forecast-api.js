@@ -54,8 +54,28 @@ async function fetchBeachForecast(beach) {
 
   return {
     beachId: beach.id,
+    metadata: {
+      fetchedAt: new Date().toISOString(),
+      provider: "open-meteo",
+      weather: forecastPayloadMetadata(weather, beach),
+      marine: forecastPayloadMetadata(marine, beach),
+    },
     weather: weatherHourly,
     marine: marineHourly,
+  };
+}
+
+function forecastPayloadMetadata(payload, beach) {
+  return {
+    model: typeof payload?.model === "string" ? payload.model : null,
+    requestedLatitude: beach.lat,
+    requestedLongitude: beach.lon,
+    latitude: numericCell(payload?.latitude),
+    longitude: numericCell(payload?.longitude),
+    elevation: numericCell(payload?.elevation),
+    timezone: payload?.timezone ?? null,
+    utcOffsetSeconds: numericCell(payload?.utc_offset_seconds),
+    generationTimeMs: numericCell(payload?.generationtime_ms),
   };
 }
 

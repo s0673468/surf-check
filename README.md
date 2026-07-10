@@ -35,10 +35,11 @@ Validate the static app with the same gates that CI runs:
 make lint    # syntax-check all eight runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
+make test-browser  # render the app in Chrome with deterministic API fixtures
 make test-mutations  # run only the focused mutation smoke
 npm run test:property       # run the deterministic property/fuzz suite
 npm run test:property:deep  # run 1000 generated examples locally
-make check   # run both gates; CI uses this
+make check   # run syntax, logic, and rendered-browser gates; CI uses this
 ```
 
 `make test` runs the no-dependency smoke suite, focused mutation smoke, and the
@@ -57,6 +58,15 @@ geometry, weather, radar, and prose-threshold mutants without adding dependencie
 The property suite uses a reproducible CI profile by default (`SURF_PROPERTY_EXAMPLES=80`)
 and a local deep profile (`SURF_PROPERTY_EXAMPLES=1000`) for longer fuzz hunts.
 
+`make test-browser` starts an ephemeral local static server and drives an installed
+Chrome or Chromium through its built-in DevTools protocol. It does not contact the
+network: Open-Meteo and third-party assets are replaced with deterministic fixtures.
+The gate covers the mobile recommendation order, expandable beach ranking, bilingual
+labels, selection-to-detail flow, map accessibility, partial/error states, and horizontal
+overflow at 320, 390, and 1280 pixels. Set `CHROME_PATH` when the browser executable is
+installed outside the usual macOS or Linux locations; the test reports a clear skip only
+when no supported executable is present locally. In CI, a missing browser fails the gate.
+
 ## Runtime structure
 
 The app deliberately stays as classic scripts with no bundler:
@@ -66,13 +76,14 @@ The app deliberately stays as classic scripts with no bundler:
 - `runtime-utils.js` — shared date, formatting, numeric, compass, geometry,
   clamp, and selected-beach helpers.
 - `forecast-api.js` — Open-Meteo hourly field lists, beach forecast URL construction,
-  payload validation, shared `fetchJson` retry behavior, and delay handling.
+  payload validation, provider/grid metadata retention, shared `fetchJson` retry behavior,
+  and delay handling.
 - `score-model.js` — the 0–100 scoring model, score tiers, score labels, scoring
   reasons, and swell/wind/tide scoring helpers.
 - `forecast-selectors.js` — selected-hour forecast views, scored-sample extraction,
   memoization, rankings, nearby-beach comparisons, and tide-state normalization.
 - `forecast-prose.js` — day summaries, spot reads, metric explanations,
-  nearby-spot contrast reasons, factor labels, and confidence-chip metadata.
+  nearby-spot counterfactual contrast reasons, factor labels, and qualitative data-quality metadata.
 - `rain-radar.js` — RainViewer metadata loading, frame normalization, frame matching,
   tile URL construction, and Leaflet radar layer lifecycle.
 - `app.js` — localization accessors, state, orchestration, DOM rendering, and
@@ -84,6 +95,8 @@ The local forecast-truth loop stays outside the browser runtime:
   one forecast score or snapshot for a beach and local time.
 - `scripts/forecast-truth.mjs` — no-network helper that compares forecast score bands with
   observed 1–5 session ratings and summarizes score and height bias.
+- `docs/calibration-protocol.md` — the real-observation sampling plan, held-out metrics,
+  acceptance thresholds, and sensitivity guard for future retuning.
 
 ## Layout
 
@@ -93,11 +106,12 @@ The local forecast-truth loop stays outside the browser runtime:
   and a rain watch-out. Whole-day peak score on the left (vs. Best bets, which is the
   selected hour). Generated in-browser from the same scored samples — see `describeDay`
   in `app.js` and scored-sample extraction in `forecast-selectors.js`.
-- **Best bets** — beaches ranked for the selected day/hour, with the top pick highlighted.
+- **Best bets** — beaches ranked on the unrounded internal score for the selected
+  day/hour. Beaches within three points of the leader form one near-tied top group.
 - **Map** — the same scores as colored pins around the island (Leaflet + OpenStreetMap),
   plus a RainViewer rain layer when radar data exists for the selected surf hour.
-- **Selected spot** — score, a **confidence chip** (forecast horizon blended with the
-  spot's source-data confidence, so a thin-data break like Brava reads as an estimate), a
+- **Selected spot** — score, a qualitative **data-quality chip** (required-field
+  completeness, forecast horizon, and spot evidence; explicitly not a probability), a
   plain-language read, key metrics (swell / wind / tide / weather), an hour-by-hour
   timeline, and the closest spots for comparison.
 
@@ -142,12 +156,11 @@ so the power model never double-counts. The implementation lives in `score-model
 2. **Period — quality multiplier.** `periodCurve` is a smooth curve. Short clean swell
    (5–7 s — the bread and butter of small fun beachbreak here) keeps real value (floor
    `0.55`) rather than being written off; solid groundswell (10–12 s) scores near-full and
-   premium long period (15 s+) tops out. The period fed to the curve (and to the shoaling
-   in `breakingHeight`) is the **longer of the combined and swell-partition periods**, so a
-   clean long-period groundswell hidden under short windsea isn't graded as chop — while
-   *size* still reads the combined sea. The windsea *mess* is docked by cleanliness, not
-   here, so period only measures swell quality. Period multiplies size; it is *not* also
-   folded into the size term.
+   premium long period (15 s+) tops out. Height and period are selected as a **single
+   physical component**: the combined sea pair when complete, otherwise the primary
+   swell pair. A small long-period partition is never attached to a larger short-period
+   combined height. The windsea *mess* is docked by cleanliness, not here, so period only
+   measures swell quality. Period multiplies size; it is *not* also folded into size.
 3. **Cleanliness, direction, closeout.** A **windsea-contamination** penalty cuts quality
    when the wind-wave partition is large (computed from the swell *partition* energy, so
    sizing on the combined sea never launders chop into free size) — and windsea running
@@ -157,7 +170,9 @@ so the power model never double-counts. The implementation lives in `score-model
    sheltered/filtered bay caps harder on a bad angle than an open swell magnet; a
    **period-aware closeout** penalty bites smoothly once the swell overpowers the beach
    (long groundswell holds bigger than short windsea).
-4. **Surfable floor.** Below a per-spot rideable floor (`DEFAULT_MIN_SURF_HEIGHT`, e.g.
+4. **Surfable floor.** Size, readiness, closeout, and the clean-fun gate all use the same
+   shelter-adjusted **at-beach breaking height**. Below a per-spot rideable floor
+   (`DEFAULT_MIN_SURF_HEIGHT`, e.g.
    `minSurfHeight` 0.7 m for Ingleses) the size curve falls off continuously — no cliff at
    the boundary — so `0.5 m @ 16 s` reads Poor even though it's clean.
 5. **Wind — multiplicative gate.** Clean-swell potential is multiplied by a wind factor
@@ -178,8 +193,9 @@ so the power model never double-counts. The implementation lives in `score-model
    reliable tide phase). Missing weather reads as **neutral**, not a flawless clear sky.
 7. **Clean-fun (the one composite).** A pure power engine buries small days: a rideable,
    clean, glassy, in-window day with little power scores ~Poor even when it's a genuinely
-   good call to paddle out (the kind of fine small Matadeiro morning that draws a crowd).
-   `CLEAN_FUN_BONUS` earns those sessions points back. It's a deliberate composite, gated
+   good call to paddle out. `CLEAN_FUN_BONUS` earns those sessions points back. Its size
+   and period gates ramp across broad bands, avoiding tier-sized jumps from a few
+   centimetres or one second. It's a deliberate composite, gated
    on *every* condition that makes it true: rideable (above the surfable floor), clean,
    **groomed period** (a separate gate — short windsea dumped into the swell columns earns
    nothing), glassy **and not onshore**, in-window, and **not big** (fades out by head-high
@@ -238,14 +254,28 @@ Brava (26.95°S), not the Floripa one. Full notes and the verified table live in
 where the model and the real beach disagree, then nudge `swellCenter` / `swellSpread` /
 `offshoreWind` / `idealTide` / `minSurfHeight`.
 
-For the local forecast-truth loop, append manual observations to
+The browser score contract is versioned as `2.0.0`. Each result keeps an integer display
+`score`, retains `rawScore` for stable ranking and near-tie grouping, and includes
+`dataQuality`. Missing essential wave or wind fields set `status: "unknown"`,
+`dataQuality.scorable: false`, and a low quality tier rather than claiming confidence.
+
+For the local forecast-truth loop, append real manual observations to
 `calibration/forecast-truth-ledger.json` after checking a beach. Pair the beach and local
-time with the forecast score or snapshot you saw, then add the observed 1–5 session rating,
-height, cleanliness, and tags. Run:
+time with the exact forecast snapshot you saw, then add the observed 1–5 session rating,
+height, cleanliness, and tags. Schema v2 records capture and target timestamps, lead time,
+algorithm version, raw inputs, field completeness, and provider/model/grid metadata. Do
+not create synthetic observations or reconstruct a forecast from a later model run. The
+download button beside the selected beach exports a schema-v2 template with the exact current
+forecast; change its status from `template` to `observed` only after filling the real beach
+check, including board/rater and separate crowd/access notes. Run:
 
 ```bash
 npm run forecast-truth
 ```
 
 Use the summary to spot repeat bias before changing `score-model.js`; do not retune from
-one row.
+one row. Once multiple beaches share the same observed window, the report also measures
+mean absolute tier error, within-one-tier accuracy, surfable false positives and recall,
+pairwise beach-ranking accuracy, and top-pick regret. Keep the current model and a simple
+baseline frozen while collecting enough held-out dates to compare them honestly.
+See [`docs/calibration-protocol.md`](docs/calibration-protocol.md) for the complete protocol.

@@ -249,8 +249,8 @@ const mutationCases = [
     name: "rank comparator direction",
     mutation: {
       file: "forecast-selectors.js",
-      from: "  return b.scored.score.score - a.scored.score.score;\n",
-      to: "  return a.scored.score.score - b.scored.score.score;\n",
+      from: "  return scoreValue(b) - scoreValue(a);\n",
+      to: "  return scoreValue(a) - scoreValue(b);\n",
     },
     invariant: invariants.rankedBeachesStayDescending,
   },

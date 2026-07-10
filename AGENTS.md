@@ -62,9 +62,15 @@ Agent-facing operating notes for this repo.
   lookup.
 - [runtime-utils.js](runtime-utils.js) owns shared date, formatting, numeric,
   compass, geometry, clamp, and selected-beach helpers.
+- [forecast-api.js](forecast-api.js) owns Open-Meteo fetch/retry behavior,
+  hourly normalization, and provider/grid metadata retention for calibration.
+- [score-model.js](score-model.js) owns the versioned score contract, physical
+  scoring, unknown-input state, and qualitative data-quality metadata.
+- [forecast-selectors.js](forecast-selectors.js) owns scored-sample extraction,
+  raw-score ranking, near-tied top groups, caching, and tide normalization.
 - [forecast-prose.js](forecast-prose.js) owns day summaries, spot reads,
-  metric explanations, nearby-spot contrast reasons, factor labels, and
-  confidence-chip metadata.
+  metric explanations, session-window recommendations, counterfactual nearby
+  contrast reasons, factor labels, and data-quality copy.
 - [app.js](app.js) owns localization accessors, state, orchestration, DOM
   rendering, and map marker rendering.
 - [tests/smoke.mjs](tests/smoke.mjs) mirrors the same script order before
@@ -79,8 +85,9 @@ Agent-facing operating notes for this repo.
 make lint    # syntax-check all eight runtime scripts
 make lint-workflows  # GitHub Actions workflow lint checks
 make test    # run the smoke suite
+make test-browser  # rendered Chrome smoke with deterministic API fixtures
 make test-mutations  # run only the focused mutation smoke
-make check   # run both gates; CI uses this
+make check   # run syntax, logic, and rendered-browser gates; CI uses this
 ```
 
 - `make lint` keeps the classic-script syntax gate in one place. It checks
@@ -102,6 +109,11 @@ make check   # run both gates; CI uses this
   source lines in memory and checks the suite kills representative comparator,
   fallback, cache-key, numeric, geometry, weather, radar, and prose-threshold
   changes without adding dependencies.
+- `make test-browser` runs an ephemeral static server and drives an installed Chrome or
+  Chromium through its DevTools protocol without npm dependencies or external network
+  access. It covers responsive ordering and overflow, localization, beach selection,
+  ranking/map disclosures, accessible markers, and partial/error forecast states. A
+  missing local browser skips clearly; a missing CI browser fails the gate.
 - Do not add snapshot churn or DOM-heavy test scaffolding for logic that can be
   tested directly through the exported runtime helpers.
 

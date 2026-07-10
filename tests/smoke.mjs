@@ -55,6 +55,7 @@ globalThis.__surfCheckTest = {
   describeTide,
   describeWeather,
   describeWind,
+  pickTopBeaches,
   fetchBeachForecast,
   fetchJson,
   getForecastView,
@@ -62,6 +63,7 @@ globalThis.__surfCheckTest = {
   getNearbyScoredBeachEntries,
   getScoredBeachEntries,
   getScoredTimeline,
+  nearTiedEntries,
   buildRadarTileUrl,
   findClosestRadarFrameIndex,
   normalizeRadarFrames,
@@ -80,8 +82,10 @@ globalThis.__surfCheckTest = {
   degToCompass,
   numericCell,
   buildSpotRead,
+  buildForecastTruthTemplate,
   compactSessionRead,
   contrastReason,
+  counterfactualContrastImpacts,
   confidenceMeta,
   scoreLabel,
   pinClass,
@@ -154,8 +158,43 @@ test("forecast truth ledger is machine readable", () => {
   );
   const analysis = analyzeTruthLedger(ledger);
 
-  assert.equal(ledger.schemaVersion, 1);
-  assert.equal(analysis.summary.entryCount, 0);
+  assert.equal(ledger.schemaVersion, 2);
+  assert.equal(typeof ledger.algorithmVersion, "string");
+  assert.ok(Array.isArray(ledger.entries));
+  assert.equal(analysis.summary.entryCount, ledger.entries.length);
+});
+
+test("forecast truth helper rejects null and blank score or rating values", () => {
+  const base = {
+    schemaVersion: 2,
+    algorithmVersion: "2.0.0",
+    entries: [{
+      id: "invalid-empty-values",
+      beachId: "matadeiro",
+      targetTime: "2026-07-10T08:00:00-03:00",
+      capturedAt: "2026-07-09T08:00:00-03:00",
+      forecast: {
+        score: 52,
+        leadHours: 24,
+        algorithmVersion: "2.0.0",
+        rawInputs: {},
+        dataQuality: { tier: "high", completeness: 1 },
+        model: { provider: "fixture", grid: {} },
+        sample: {},
+      },
+      observed: { rating: 3 },
+    }],
+  };
+  for (const value of [null, "", "   "]) {
+    assert.throws(
+      () => analyzeTruthLedger({ ...base, entries: [{ ...base.entries[0], forecast: { ...base.entries[0].forecast, score: value } }] }),
+      /forecast\.score/,
+    );
+    assert.throws(
+      () => analyzeTruthLedger({ ...base, entries: [{ ...base.entries[0], observed: { rating: value } }] }),
+      /observed\.rating/,
+    );
+  }
 });
 
 test("forecast truth helper compares one forecast with one observed session", () => {
@@ -193,8 +232,67 @@ test("forecast truth helper compares one forecast with one observed session", ()
   assert.equal(entry.ratingDelta, 1);
   assert.equal(entry.heightDeltaM, -0.06);
   assert.equal(analysis.summary.tooPessimistic, 1);
+  assert.equal(analysis.summary.meanAbsoluteTierError, 1);
+  assert.equal(analysis.summary.withinOneTierRate, 1);
+  assert.equal(analysis.summary.surfableRecall, 0);
   assert.match(summary, /matadeiro/);
   assert.match(summary, /\+1/);
+});
+
+test("forecast truth helper measures classification, ranking, and top-pick regret", () => {
+  const targetTime = "2026-07-10T11:00:00.000Z";
+  const makeEntry = (id, beachId, score, rawScore, rating) => ({
+    id,
+    beachId,
+    targetTime,
+    forecast: { score, rawScore },
+    observed: { rating },
+  });
+  const analysis = analyzeTruthLedger({
+    schemaVersion: 1,
+    entries: [
+      makeEntry("a", "a", 80, 80.4, 4),
+      makeEntry("b", "b", 70, 70.2, 5),
+      makeEntry("c", "c", 55, 55.1, 2),
+    ],
+  });
+
+  assert.equal(analysis.summary.withinOneTierRate, 1);
+  assert.equal(analysis.summary.surfableFalsePositiveRate, 1);
+  assert.equal(analysis.summary.surfableRecall, 1);
+  assert.equal(analysis.summary.pairwiseRankingAccuracy, 0.6667);
+  assert.equal(analysis.summary.pairwiseComparisons, 3);
+  assert.equal(analysis.summary.meanTopPickRegret, 1);
+  assert.equal(analysis.summary.rankedWindows, 1);
+});
+
+test("browser truth export preserves the exact forecast contract without inventing observations", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const sample = {
+    ...cleanAlignedSample(beach, { height: 1.1, period: 9 }),
+    time: "2026-07-10T08:00",
+  };
+  const scored = {
+    beach,
+    sample,
+    score: surf.scoreSample(beach, sample, 1),
+    forecastMetadata: {
+      fetchedAt: "2026-07-09T11:00:00.000Z",
+      provider: "open-meteo",
+      weather: { model: null, latitude: -27.6, longitude: -48.5 },
+      marine: { model: null, latitude: -27.61, longitude: -48.49 },
+    },
+  };
+  const entry = surf.buildForecastTruthTemplate(scored);
+
+  assert.equal(entry.status, "template");
+  assert.equal(entry.targetTime, "2026-07-10T11:00:00.000Z");
+  assert.equal(entry.forecast.leadHours, 24);
+  assert.equal(entry.forecast.algorithmVersion, "2.0.0");
+  assert.equal(entry.forecast.model.provider, "open-meteo");
+  assert.equal(entry.forecast.rawInputs.waveHeight, 1.1);
+  assert.equal(entry.observed.rating, null);
+  assert.equal(entry.observed.cleanliness, "");
 });
 
 function seedForecasts() {
@@ -438,6 +536,19 @@ test("forecast prose helpers tolerate partial samples in both languages", () => 
   }
 });
 
+test("swell prose compares the shelter-adjusted breaking estimate with the spot band", () => {
+  const beach = {
+    ...surf.BEACHES.find((item) => item.id === "barra-da-lagoa"),
+    idealHeight: [0.8, 1.2],
+  };
+  const sample = cleanAlignedSample(beach, { height: 0.8, period: 8 });
+  surf.state.lang = "en";
+  const read = surf.describeSwell(beach, sample).short;
+  surf.state.lang = "pt";
+  assert.match(read, /small|below/);
+  assert.doesNotMatch(read, /ideal range/);
+});
+
 test("nearby contrast prose falls back when scores are nearly tied", () => {
   const selectedBeach = surf.BEACHES.find((item) => item.id === "praia-mole");
   const otherBeach = surf.BEACHES.find((item) => item.id === "joaquina");
@@ -478,6 +589,29 @@ test("nearby contrast prose names the dominant factor", () => {
 
   surf.state.lang = "en";
   assert.match(surf.contrastReason(selectedScored, otherScored), /Wind is closer to offshore/);
+});
+
+test("nearby contrast attribution uses actual counterfactual score deltas", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const otherBeach = surf.BEACHES.find((item) => item.id === "praia-mole");
+  const selected = {
+    beach,
+    sample: cleanAlignedSample(beach, { height: 1.4, period: 12 }),
+  };
+  selected.score = surf.scoreSample(beach, selected.sample, 0);
+  const other = {
+    beach: otherBeach,
+    sample: {
+      ...cleanAlignedSample(otherBeach, { height: 1.4, period: 12 }),
+      windSpeed: 28,
+      windGusts: 36,
+      windDirection: (otherBeach.offshoreWind + 180) % 360,
+    },
+  };
+  other.score = surf.scoreSample(otherBeach, other.sample, 0);
+  const impacts = surf.counterfactualContrastImpacts(selected, other);
+  assert.ok(impacts.wind > impacts.weather);
+  assert.ok(Object.values(impacts).every(Number.isFinite));
 });
 
 test("rain radar metadata normalizes past and nowcast frames", () => {
@@ -647,7 +781,10 @@ test("scoring rewards long-period overhead swell and punishes a short-period clo
   const closeout = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 3.2, period: 8 }), 0);
 
   assert.ok(groundswell.score >= 75, `clean overhead groundswell should be Excellent-ish, got ${groundswell.score}`);
-  assert.ok(groundswell.score > closeout.score + 30, `closeout (${closeout.score}) should be far below groundswell (${groundswell.score})`);
+  assert.ok(
+    groundswell.rawScore > closeout.rawScore + 30,
+    `closeout (${closeout.rawScore}) should be far below groundswell (${groundswell.rawScore})`,
+  );
 });
 
 test("scoring tiny long-period swell still reads Poor", () => {
@@ -699,13 +836,13 @@ test("scoring sizes on the combined sea, not the smaller swell sub-partition", (
   assert.ok(scored.detail.breakingHeight > partitionOnly + 0.1, "combined sea must read bigger than the sub-partition");
 });
 
-test("a clean, glassy, rideable small day reads Surfável, not Poor", () => {
+test("a clean morning below the at-beach floor is not rescued to Surfável", () => {
   const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
   const scored = surf.scoreSample(beach, matadeiroCleanMorning, 0);
 
-  assert.ok(scored.score >= 52, `clean glassy rideable morning should be Surfável+, got ${scored.score}`);
-  assert.ok(scored.detail.cleanFun > 0.1, `clean-fun term should be active, got ${scored.detail.cleanFun}`);
-  assert.ok(scored.reasons.some((reason) => reason.includes("glassy")), "should explain the small clean call");
+  assert.ok(scored.detail.breakingHeight < surf.surfableHeightFloor(beach));
+  assert.ok(scored.score < 38, `sub-floor at-beach estimate must stay Poor, got ${scored.score}`);
+  assert.equal(scored.detail.cleanFun, 0);
 });
 
 test("the clean-fun bonus is gated off when the same swell blows out", () => {
@@ -805,6 +942,73 @@ test("wind factor is monotonic and front-loads light offshore over glassy", () =
       `offshore wind factor dipped at ${speed} km/h`,
     );
   }
+});
+
+test("the full score never penalizes light offshore wind versus calm", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const at = (windSpeed) => surf.scoreSample(
+    beach,
+    { ...cleanAlignedSample(beach, { height: 0.8, period: 8 }), windSpeed, windGusts: windSpeed },
+    0,
+  );
+  const calm = at(0);
+  const offshore = at(10);
+  assert.ok(offshore.rawScore >= calm.rawScore, `${offshore.rawScore} should be >= ${calm.rawScore}`);
+});
+
+test("clean small-surf sensitivity is smooth across size and period", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const score = (height, period) => surf.scoreSample(
+    beach,
+    { ...cleanAlignedSample(beach, { height, period }), windSpeed: 2, windGusts: 2 },
+    0,
+  ).rawScore;
+  assert.ok(score(0.77, 8) - score(0.65, 8) <= 18, "12 cm should not create a tier-sized cliff");
+  assert.ok(score(0.8, 6) - score(0.8, 5) <= 14, "one second should not create a tier-sized cliff");
+});
+
+test("combined height keeps its own period instead of borrowing a partition period", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const scored = surf.scoreSample(beach, {
+    ...cleanAlignedSample(beach, { height: 1.5, period: 5 }),
+    swellHeight: 0.5,
+    swellPeriod: 16,
+  }, 0);
+  assert.equal(scored.detail.effectivePeriod, 5);
+  assert.ok(scored.score < 66, `short combined sea should not borrow 16 s quality, got ${scored.score}`);
+});
+
+test("readiness and closeout use shelter-adjusted at-beach height", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "barra-da-lagoa");
+  const scored = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 0.8, period: 8 }), 0);
+  assert.ok(scored.detail.breakingHeight < surf.surfableHeightFloor(beach));
+  assert.equal(
+    scored.detail.sizeReadiness,
+    surf.surfableHeightFactor(scored.detail.breakingHeight, beach),
+  );
+  assert.ok(scored.score < 52, `sub-floor at-beach size should stay below Workable, got ${scored.score}`);
+});
+
+test("missing essential wave or wind fields are explicitly low-quality and unscorable", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const missingWind = cleanAlignedSample(beach, { height: 1.2, period: 10 });
+  missingWind.windSpeed = null;
+  missingWind.windDirection = null;
+  const scored = surf.scoreSample(beach, missingWind, 0);
+  assert.equal(scored.dataQuality.tier, "low");
+  assert.equal(scored.dataQuality.scorable, false);
+  assert.equal(scored.status, "unknown");
+  assert.equal(scored.score, 0);
+  assert.match(scored.label, /insuficientes/i);
+});
+
+test("scores retain raw precision and near ties are grouped", () => {
+  const entries = [60.2, 62.9, 57.8].map((rawScore, index) => ({
+    beach: { id: `beach-${index}` },
+    scored: { score: { score: Math.round(rawScore), rawScore } },
+  }));
+  const grouped = surf.nearTiedEntries(entries, 3);
+  assert.deepEqual(Array.from(grouped, (entry) => entry.beach.id), ["beach-1", "beach-0"]);
 });
 
 test("strong wind tapers smoothly instead of cliffing", () => {
@@ -1086,9 +1290,20 @@ test("beach forecast requests pin the Open-Meteo query contract", async () => {
           ok: true,
           async json() {
             if (parsed.hostname === "marine-api.open-meteo.com") {
-              return { hourly: { time, wave_height: [1.1, 1.2] } };
+              return {
+                latitude: -27.61,
+                longitude: -48.49,
+                generationtime_ms: 1.2,
+                hourly: { time, wave_height: [1.1, 1.2] },
+              };
             }
-            return { hourly: { time, temperature_2m: [21, 22] } };
+            return {
+              latitude: -27.6,
+              longitude: -48.5,
+              elevation: 3,
+              generationtime_ms: 0.8,
+              hourly: { time, temperature_2m: [21, 22] },
+            };
           },
         };
       },
@@ -1100,6 +1315,12 @@ test("beach forecast requests pin the Open-Meteo query contract", async () => {
       const marineUrl = requestedUrls.find((url) => url.hostname === "marine-api.open-meteo.com");
 
       assert.equal(forecast.beachId, beach.id);
+      assert.equal(forecast.metadata.provider, "open-meteo");
+      assert.equal(forecast.metadata.weather.latitude, -27.6);
+      assert.equal(forecast.metadata.weather.elevation, 3);
+      assert.equal(forecast.metadata.marine.longitude, -48.49);
+      assert.equal(forecast.metadata.marine.generationTimeMs, 1.2);
+      assert.match(forecast.metadata.fetchedAt, /^\d{4}-\d{2}-\d{2}T/);
       assert.equal(requestedUrls.length, 2);
       assert.ok(weatherUrl);
       assert.ok(marineUrl);
@@ -1288,17 +1509,15 @@ test("a far-oversized short-period swell collapses to the closeout floor", () =>
   assert.ok(long.detail.oversize > short.detail.oversize, "long groundswell closes out later than short");
 });
 
-test("period quality reads the longer of the combined and swell-partition period", () => {
+test("period quality stays paired with the selected combined-wave height", () => {
   seedForecasts();
   const beach = surf.BEACHES.find((item) => item.id === "joaquina");
   const base = cleanAlignedSample(beach, { height: 1.3, period: 7 }); // combined 7 s
   const hidden = { ...base, swellPeriod: 13 }; // a 13 s groundswell hidden under the blended sea
   const blended = surf.scoreSample(beach, base, 0);
-  const groundswell = surf.scoreSample(beach, hidden, 0);
-  assert.ok(
-    groundswell.detail.periodFit > blended.detail.periodFit,
-    "a long swell-partition period must not be graded as short-period chop",
-  );
+  const hiddenPartition = surf.scoreSample(beach, hidden, 0);
+  assert.equal(hiddenPartition.detail.periodFit, blended.detail.periodFit);
+  assert.equal(hiddenPartition.detail.effectivePeriod, 7);
 });
 
 test("windsea aligned with the swell window contaminates less than opposed windsea", () => {
@@ -1442,7 +1661,7 @@ test("day prose helper keys track size, cleanliness, windows, and trends", () =>
     hour,
     scored: {
       sample: { waveHeight: height, swellHeight: height, wavePeriod: 12, swellPeriod: 12 },
-      score: { score, parts: { wind } },
+      score: { score, parts: { wind }, detail: { breakingHeight: height } },
     },
   });
   const conditionKeys = (result) => ({
@@ -1498,11 +1717,47 @@ test("day prose helper keys track size, cleanliness, windows, and trends", () =>
     { hour: 16, score: 68 },
   ];
   assert.equal(surf.summarizeTiming(building, { hour: 16 }, 68).trend, "buildsPM");
+
+  const isolatedSpike = [
+    { hour: 7, score: 70 }, { hour: 8, score: 72 }, { hour: 9, score: 71 },
+    { hour: 11, score: 30 }, { hour: 12, score: 90 }, { hour: 13, score: 30 },
+  ];
+  assert.deepEqual(
+    Array.from(surf.summarizeTiming(isolatedSpike, { hour: 12 }, 90).windowHours),
+    [7, 8, 9],
+    "a durable three-hour session should beat an isolated hourly spike",
+  );
 });
 
-test("a clean-fun rescued day's one-liner credits the clean call, not swell as the problem", () => {
+test("day spot recommendations rank the shared session window, not unrelated peaks", () => {
+  const durable = surf.BEACHES[0];
+  const spiky = surf.BEACHES[1];
+  const entry = (beach, hour, rawScore) => ({
+    beach,
+    hour,
+    scored: { score: { score: Math.round(rawScore), rawScore } },
+  });
+  const grouped = new Map([
+    [durable.id, [entry(durable, 7, 66), entry(durable, 8, 65), entry(durable, 9, 64)]],
+    [spiky.id, [entry(spiky, 7, 40), entry(spiky, 8, 92), entry(spiky, 9, 41)]],
+  ]);
+
+  const ranked = surf.pickTopBeaches(grouped, [7, 8, 9]);
+  assert.equal(ranked[0].beach.id, durable.id);
+  assert.equal(ranked[0].score, 65);
+});
+
+test("an above-floor clean-fun day's one-liner credits the clean call", () => {
   const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
-  const scored = { beach, sample: matadeiroCleanMorning, score: surf.scoreSample(beach, matadeiroCleanMorning, 0) };
+  const sample = {
+    ...matadeiroCleanMorning,
+    waveHeight: 1.3,
+    wavePeriod: 8,
+    swellHeight: 1.3,
+    swellPeriod: 8,
+  };
+  const scored = { beach, sample, score: surf.scoreSample(beach, sample, 0) };
+  assert.ok(scored.score.score >= 52, `fixture should be workable+, got ${scored.score.score}`);
   surf.state.lang = "en";
   const read = surf.compactSessionRead(scored);
   surf.state.lang = "pt";
@@ -1510,7 +1765,21 @@ test("a clean-fun rescued day's one-liner credits the clean call, not swell as t
   assert.ok(!/swell/i.test(read.slice(read.indexOf(":") + 1)), "must not blame swell on a rescued day");
 });
 
-test("confidence chip blends forecast horizon with per-spot data confidence", () => {
+test("clean-fun prose does not call a below-workable score worth paddling", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const sample = cleanAlignedSample(beach, { height: 0.9, period: 8 });
+  const scored = { beach, sample, score: surf.scoreSample(beach, sample, 0) };
+  scored.score.score = 46;
+  scored.score.label = "Poor";
+  scored.score.detail.cleanFun = 0.2;
+  surf.state.lang = "en";
+  const read = surf.compactSessionRead(scored);
+  surf.state.lang = "pt";
+  assert.match(read, /short on power/);
+  assert.doesNotMatch(read, /worth the paddle/);
+});
+
+test("data-quality chip is qualitative and never claims probability", () => {
   seedForecasts();
   const beach = surf.selectedBeach();
   surf.state.lang = "en";
@@ -1519,7 +1788,8 @@ test("confidence chip blends forecast horizon with per-spot data confidence", ()
   surf.state.lang = "pt";
   const tierRank = { high: 3, mid: 2, low: 1 };
   assert.ok(tierRank[today.tier] >= tierRank[far.tier], "a nearer forecast is at least as confident as a far one");
-  assert.ok(/confidence/i.test(today.text), "chip carries a human-readable label");
+  assert.match(today.text, /evidence/i);
+  assert.doesNotMatch(`${today.text} ${today.title}`, /~?\d+% confidence/i);
 });
 
 test("compass labels wrap around negative and out-of-range degrees", () => {

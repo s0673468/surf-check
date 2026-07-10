@@ -1,6 +1,7 @@
 {
-  "schemaVersion": 1,
-  "description": "Append manual surf observations here. Each entry pairs one forecast score or snapshot with what the beach actually did.",
+  "schemaVersion": 2,
+  "algorithmVersion": "2.0.0",
+  "description": "Append real manual observations here. Do not add synthetic or reconstructed observations as truth.",
   "ratingScale": {
     "1": "poor",
     "2": "marginal",
@@ -12,20 +13,36 @@
     "id": "YYYY-MM-DD-beach-id-HHMM",
     "status": "observed",
     "beachId": "joaquina",
+    "capturedAt": "YYYY-MM-DDTHH:MM:SS-03:00",
     "targetTime": "YYYY-MM-DDTHH:00:00-03:00",
     "forecast": {
       "score": 52,
+      "rawScore": 51.73,
       "label": "workable",
-      "sample": {
-        "waveHeightM": 1.0,
-        "wavePeriodS": 8.0,
-        "waveDirectionDeg": 135,
-        "swellHeightM": 0.8,
-        "swellPeriodS": 8.0,
-        "swellDirectionDeg": 135,
-        "windSpeedKmh": 8,
-        "windDirectionDeg": 315,
-        "windGustsKmh": 12,
+      "algorithmVersion": "2.0.0",
+      "leadHours": 24,
+      "dataQuality": {
+        "tier": "high",
+        "completeness": 1.0,
+        "missingEssential": []
+      },
+      "model": {
+        "provider": "open-meteo",
+        "weatherModel": "returned API model identifier",
+        "marineModel": "returned API model identifier",
+        "weatherGrid": { "latitude": -27.0, "longitude": -48.0, "elevationM": 0 },
+        "marineGrid": { "latitude": -27.0, "longitude": -48.0 }
+      },
+      "rawInputs": {
+        "waveHeight": 1.0,
+        "wavePeriod": 8.0,
+        "waveDirection": 135,
+        "swellHeight": 0.8,
+        "swellPeriod": 8.0,
+        "swellDirection": 135,
+        "windSpeed": 8,
+        "windDirection": 315,
+        "windGusts": 12,
         "tideState": 0.5
       }
     },
@@ -33,6 +50,10 @@
       "rating": 3,
       "heightM": 1.0,
       "cleanliness": "clean",
+      "board": "shortboard",
+      "rater": "initials or stable alias",
+      "crowd": 2,
+      "accessNotes": "Keep access and crowd separate from wave quality.",
       "notes": "Short note from the beach check."
     },
     "tags": ["small-clean"]

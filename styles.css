@@ -186,7 +186,8 @@ h1 {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.3px;
-  min-height: 28px;
+  min-height: 44px;
+  min-width: 44px;
   padding: 0 12px;
   transition:
     background 140ms ease,
@@ -264,7 +265,33 @@ h1 {
 .dashboard {
   display: grid;
   gap: var(--space-md);
+  grid-template-areas:
+    "controls controls"
+    "day day"
+    "bets map"
+    "detail detail";
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
   min-width: 0;
+}
+
+.control-strip {
+  grid-area: controls;
+}
+
+.day-overview {
+  grid-area: day;
+}
+
+.best-bets {
+  grid-area: bets;
+}
+
+.map-panel {
+  grid-area: map;
+}
+
+.detail-grid {
+  grid-area: detail;
 }
 
 .control-strip,
@@ -404,11 +431,11 @@ h1 {
 .hour-slider-shell input[type="range"] {
   accent-color: var(--accent);
   cursor: pointer;
-  height: 28px; /* taller hit area for touch */
+  height: 44px;
   width: 100%;
 }
 
-/* Enlarge the thumb beyond the browser default toward a ~24px touch target.
+/* Keep the visual thumb compact while the input provides a 44px hit area.
    Once the thumb appearance is custom, the track must be styled too or WebKit
    hides it. */
 .hour-slider-shell input[type="range"]::-webkit-slider-runnable-track {
@@ -424,9 +451,9 @@ h1 {
   border: 3px solid var(--panel);
   border-radius: 50%;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-  height: 24px;
-  margin-top: -8px; /* center the 24px thumb on the 8px track */
-  width: 24px;
+  height: 28px;
+  margin-top: -10px;
+  width: 28px;
 }
 
 .hour-slider-shell input[type="range"]::-moz-range-track {
@@ -439,8 +466,8 @@ h1 {
   background: var(--accent);
   border: 3px solid var(--panel);
   border-radius: 50%;
-  height: 22px;
-  width: 22px;
+  height: 26px;
+  width: 26px;
 }
 
 .hour-ticks {
@@ -575,15 +602,6 @@ h1 {
   margin: 0;
 }
 
-/* ---------- Hero grid (best bets + map) ---------- */
-.hero-grid {
-  align-items: start;
-  display: grid;
-  gap: var(--space-md);
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-  min-width: 0;
-}
-
 .best-bets {
   display: flex;
   flex-direction: column;
@@ -688,6 +706,47 @@ h1 {
   font-size: 16px;
 }
 
+.top-group-summary {
+  color: var(--fg1);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.decision-signals {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.decision-signals > span:not(.confidence-chip) {
+  background: var(--panel-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  color: var(--fg2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.decision-signals .confidence-chip {
+  margin-top: 0;
+}
+
+.partial-notice {
+  background: color-mix(in srgb, var(--orange) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--orange) 35%, transparent);
+  border-radius: var(--radius-input);
+  color: var(--fg1);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0 0 var(--space-sm);
+  padding: 10px 12px;
+}
+
 /* ---------- Ranked rows ---------- */
 .beach-list {
   display: grid;
@@ -703,12 +762,44 @@ h1 {
   display: grid;
   gap: var(--space-sm);
   grid-template-columns: 42px minmax(0, 1fr) auto;
+  min-height: 56px;
   padding: 8px 10px;
   text-align: left;
   transition:
     background 140ms ease,
     border-color 140ms ease;
   width: 100%;
+}
+
+.beach-row[hidden] {
+  display: none;
+}
+
+.rank-toggle {
+  align-items: center;
+  align-self: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg2);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 700;
+  gap: 6px;
+  justify-content: center;
+  margin-top: var(--space-sm);
+  min-height: 44px;
+  padding: 6px 16px;
+}
+
+.rank-toggle:hover {
+  border-color: var(--accent);
+  color: var(--fg1);
+}
+
+.rank-toggle .material-symbols-rounded {
+  font-size: 18px;
 }
 
 .beach-row:hover {
@@ -776,6 +867,83 @@ h1 {
   position: relative;
 }
 
+.map-content {
+  height: 100%;
+  min-height: 600px;
+  position: relative;
+}
+
+.map-content[hidden] {
+  display: none;
+}
+
+.map-disclosure {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--fg1);
+  cursor: pointer;
+  display: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  gap: 10px;
+  justify-content: flex-start;
+  min-height: 52px;
+  padding: 4px var(--space-md);
+  width: 100%;
+}
+
+.map-disclosure > .material-symbols-rounded:first-child {
+  color: var(--accent);
+}
+
+.map-disclosure-chevron {
+  margin-left: auto;
+  transition: transform 160ms ease;
+}
+
+.map-disclosure[aria-expanded="true"] .map-disclosure-chevron {
+  transform: rotate(180deg);
+}
+
+.map-activation {
+  background: rgba(24, 24, 36, 0.92);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg1);
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 6px 12px;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 600;
+}
+
+.map-activation[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.radar-status {
+  background: rgba(24, 24, 36, 0.88);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  bottom: 66px;
+  color: var(--fg2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  left: 14px;
+  margin: 0;
+  max-width: min(70%, 320px);
+  padding: 7px 10px;
+  position: absolute;
+  z-index: 500;
+}
+
 .map,
 .fallback-map {
   height: 100%;
@@ -813,9 +981,20 @@ h1 {
   font-family: var(--font-display);
   font-size: 0.8rem;
   font-weight: 800;
-  height: 38px;
+  height: 44px;
   justify-content: center;
-  width: 38px;
+  transition: box-shadow 140ms ease, transform 140ms ease;
+  width: 44px;
+}
+
+.map-pin.is-selected {
+  border-color: var(--fg1);
+  border-width: 4px;
+  box-shadow:
+    0 0 0 4px var(--canvas),
+    0 0 0 7px var(--accent),
+    0 8px 20px rgba(0, 0, 0, 0.5);
+  transform: scale(1.08);
 }
 
 .beach-tooltip {
@@ -937,9 +1116,14 @@ h1 {
   transform: translate(-50%, -50%);
 }
 
+.fallback-pin.is-selected {
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
 /* ---------- Pin / score tiers (shared) ---------- */
 .pin-excellent {
   background: var(--score-excellent);
+  color: #08211e;
 }
 .pin-good {
   background: var(--score-good);
@@ -984,6 +1168,7 @@ h1 {
   gap: var(--space-md);
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   min-width: 0;
+  scroll-margin-top: var(--space-sm);
 }
 
 .side-panel {
@@ -996,6 +1181,38 @@ h1 {
 .selected-summary {
   display: grid;
   gap: var(--space-sm);
+}
+
+.selected-kicker {
+  align-items: center;
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: space-between;
+}
+
+.selected-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.selected-action {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--fg2);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 44px;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.favorite-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .summary-top {
@@ -1391,7 +1608,16 @@ h1 {
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1040px) {
-  .hero-grid,
+  .dashboard {
+    grid-template-areas:
+      "controls"
+      "day"
+      "bets"
+      "map"
+      "detail";
+    grid-template-columns: 1fr;
+  }
+
   .detail-grid {
     grid-template-columns: 1fr;
   }
@@ -1401,6 +1627,7 @@ h1 {
   }
 
   .map-panel,
+  .map-content,
   .map,
   .fallback-map {
     min-height: 460px;
@@ -1413,18 +1640,28 @@ h1 {
   }
 
   .topbar {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+  }
+
+  .brand-mark {
+    border-radius: 14px;
+    height: 44px;
+    width: 44px;
   }
 
   .topbar-status {
     align-items: stretch;
+    display: flex;
+    flex-wrap: wrap;
     justify-items: stretch;
     width: 100%;
   }
 
   .status-pill,
   .temp-strip {
+    flex: 1 1 auto;
     justify-content: flex-start;
   }
 
@@ -1434,6 +1671,48 @@ h1 {
 
   h1 {
     font-size: 1.6rem;
+  }
+
+  .dashboard {
+    grid-template-areas:
+      "bets"
+      "controls"
+      "day"
+      "detail"
+      "map";
+  }
+
+  .best-bets,
+  .control-strip,
+  .side-panel,
+  .timeline-panel {
+    padding: var(--space-md);
+  }
+
+  .best-bets .section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .bet-hero {
+    gap: var(--space-sm);
+    grid-template-columns: 72px minmax(0, 1fr);
+    padding: var(--space-sm);
+  }
+
+  .bet-hero-score {
+    font-size: 2rem;
+    height: 72px;
+    width: 72px;
+  }
+
+  .bet-hero-name {
+    font-size: 1.25rem;
+  }
+
+  .decision-signals {
+    grid-column: 1 / -1;
   }
 
   .control-strip {
@@ -1490,10 +1769,23 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .map-panel,
+  .map-panel {
+    min-height: 0;
+  }
+
+  .map-disclosure {
+    display: flex;
+  }
+
+  .map-content,
   .map,
   .fallback-map {
     min-height: 400px;
+  }
+
+  .map-activation {
+    left: 12px;
+    right: auto;
   }
 
   .timeline {
