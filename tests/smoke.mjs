@@ -239,6 +239,24 @@ test("forecast truth helper compares one forecast with one observed session", ()
   assert.match(summary, /\+1/);
 });
 
+test("forecast truth height bias prefers the scored at-beach breaking estimate", () => {
+  const analysis = analyzeTruthLedger({
+    schemaVersion: 1,
+    entries: [{
+      id: "sheltered-breaking-height",
+      beachId: "barra-da-lagoa",
+      targetTime: "2026-07-10T11:00:00.000Z",
+      forecast: {
+        score: 45,
+        breakingHeightM: 0.7,
+        rawInputs: { waveHeight: 1.1 },
+      },
+      observed: { rating: 2, heightM: 0.8 },
+    }],
+  });
+  assert.equal(analysis.comparisons[0].heightDeltaM, 0.1);
+});
+
 test("forecast truth helper measures classification, ranking, and top-pick regret", () => {
   const targetTime = "2026-07-10T11:00:00.000Z";
   const makeEntry = (id, beachId, score, rawScore, rating) => ({
@@ -289,6 +307,7 @@ test("browser truth export preserves the exact forecast contract without inventi
   assert.equal(entry.targetTime, "2026-07-10T11:00:00.000Z");
   assert.equal(entry.forecast.leadHours, 24);
   assert.equal(entry.forecast.algorithmVersion, "2.0.0");
+  assert.equal(entry.forecast.breakingHeightM, scored.score.detail.breakingHeight);
   assert.equal(entry.forecast.model.provider, "open-meteo");
   assert.equal(entry.forecast.rawInputs.waveHeight, 1.1);
   assert.equal(entry.observed.rating, null);
@@ -1000,6 +1019,15 @@ test("missing essential wave or wind fields are explicitly low-quality and unsco
   assert.equal(scored.status, "unknown");
   assert.equal(scored.score, 0);
   assert.match(scored.label, /insuficientes/i);
+});
+
+test("neutralized tide state does not hide missing raw sea-level data", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const complete = cleanAlignedSample(beach, { height: 1.2, period: 10 });
+  const missingTide = { ...complete, seaLevel: null, nextSeaLevel: null, tideState: 0.5 };
+  const completeScore = surf.scoreSample(beach, complete, 0);
+  const missingScore = surf.scoreSample(beach, missingTide, 0);
+  assert.ok(missingScore.dataQuality.completeness < completeScore.dataQuality.completeness);
 });
 
 test("scores retain raw precision and near ties are grouped", () => {
@@ -1726,6 +1754,16 @@ test("day prose helper keys track size, cleanliness, windows, and trends", () =>
     Array.from(surf.summarizeTiming(isolatedSpike, { hour: 12 }, 90).windowHours),
     [7, 8, 9],
     "a durable three-hour session should beat an isolated hourly spike",
+  );
+
+  const weakPadding = [
+    { hour: 7, score: 68 }, { hour: 8, score: 67 }, { hour: 9, score: 20 },
+    { hour: 12, score: 30 }, { hour: 13, score: 25 }, { hour: 14, score: 22 },
+  ];
+  assert.deepEqual(
+    Array.from(surf.summarizeTiming(weakPadding, { hour: 7 }, 68).windowHours),
+    [7, 8],
+    "weak adjacent hours must not pad a two-hour good window",
   );
 });
 

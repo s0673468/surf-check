@@ -15,6 +15,70 @@ const VIEWPORTS = [
   { width: 390, height: 844 },
   { width: 1280, height: 720 },
 ];
+const LEAFLET_STUB_SOURCE = String.raw`(() => {
+  const renderMarker = (marker) => {
+    marker.element.innerHTML = marker.icon?.html ?? "";
+    marker.element.title = marker.options.title ?? "";
+  };
+  window.L = {
+    map(id, options = {}) {
+      const container = document.getElementById(id);
+      const layers = new Set();
+      container.dataset.leafletStub = "true";
+      const scrollWheelZoom = {
+        active: Boolean(options.scrollWheelZoom),
+        enable() { this.active = true; container.dataset.scrollWheelZoom = "true"; },
+        disable() { this.active = false; container.dataset.scrollWheelZoom = "false"; },
+      };
+      return {
+        container,
+        layers,
+        scrollWheelZoom,
+        setView() { return this; },
+        invalidateSize() {},
+        removeLayer(layer) {
+          layers.delete(layer);
+          if (layer.isRadar) delete container.dataset.radarLayer;
+        },
+      };
+    },
+    tileLayer(url, options = {}) {
+      return {
+        url,
+        options,
+        isRadar: options.zIndex === 350,
+        addTo(map) {
+          this.map = map;
+          map.layers.add(this);
+          if (this.isRadar) map.container.dataset.radarLayer = "active";
+          return this;
+        },
+        setUrl(nextUrl) {
+          this.url = nextUrl;
+          if (this.isRadar && this.map) this.map.container.dataset.radarLayer = "active";
+        },
+      };
+    },
+    divIcon(options) { return options; },
+    marker(_coordinates, options = {}) {
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "leaflet-marker-icon";
+      const marker = {
+        element,
+        options,
+        icon: options.icon,
+        addTo(map) { this.map = map; map.container.append(element); renderMarker(this); return this; },
+        bindTooltip() { return this; },
+        on(name, handler) { element.addEventListener(name, handler); return this; },
+        setIcon(icon) { this.icon = icon; renderMarker(this); return this; },
+        setZIndexOffset(value) { element.style.zIndex = String(value); return this; },
+        getElement() { return element; },
+      };
+      return marker;
+    },
+  };
+})();`;
 
 test(
   "rendered app preserves its mobile decision flow, accessibility, and failure states",
@@ -180,7 +244,7 @@ test(
           const panel = document.querySelector('#mapPanel');
           const toggle = document.querySelector('[data-map-toggle]');
           const body = document.querySelector('[data-map-content]');
-          const markers = [...document.querySelectorAll('.map-pin')];
+          const markers = [...document.querySelectorAll('.leaflet-marker-icon, .fallback-pin')];
           return {
             label: panel?.getAttribute('aria-label'),
             expanded: toggle?.getAttribute('aria-expanded'),
@@ -189,6 +253,9 @@ test(
             activation: document.querySelector('[data-map-activate]')?.getAttribute('aria-pressed'),
             markerCount: markers.length,
             markerLabels: markers.map((marker) => marker.getAttribute('aria-label') ?? marker.title ?? ''),
+            leafletActive: document.querySelector('#map')?.dataset.leafletStub,
+            fallbackHidden: document.querySelector('#fallbackMap')?.hidden,
+            radarLayer: document.querySelector('#map')?.dataset.radarLayer,
           };
         })()`);
         assert.ok(mapA11y.label?.length > 0);
@@ -197,6 +264,9 @@ test(
         assert.equal(mapA11y.bodyId, "mapContent");
         assert.ok(["false", "true"].includes(mapA11y.activation));
         assert.equal(mapA11y.markerCount, 11);
+        assert.equal(mapA11y.leafletActive, "true");
+        assert.equal(mapA11y.fallbackHidden, true);
+        assert.equal(mapA11y.radarLayer, "active");
         for (const label of mapA11y.markerLabels) {
           assert.match(label, /\S+.+\b\d{1,3}\b.+\S+/);
         }
@@ -426,6 +496,19 @@ class CdpSession {
 
 async function fulfillRequest(page, { requestId, request }, scenario) {
   const url = new URL(request.url);
+  if (url.hostname === "unpkg.com") {
+    const javascript = url.pathname.endsWith(".js");
+    await page.send("Fetch.fulfillRequest", {
+      requestId,
+      responseCode: 200,
+      responseHeaders: [
+        { name: "Content-Type", value: javascript ? "application/javascript" : "text/css" },
+        { name: "Access-Control-Allow-Origin", value: "*" },
+      ],
+      body: Buffer.from(javascript ? LEAFLET_STUB_SOURCE : "").toString("base64"),
+    });
+    return;
+  }
   if (url.hostname === "api.rainviewer.com") {
     await page.send("Fetch.fulfillRequest", {
       requestId,
@@ -538,11 +621,15 @@ function marineFixture(latitude) {
 
 function rainViewerFixture() {
   const now = Math.floor(Date.now() / 1000);
+  const frames = Array.from({ length: 37 }, (_, index) => ({
+    time: now + (index - 18) * 3_600,
+    path: `/browser-smoke/radar-${index}`,
+  }));
   return {
     host: "https://mock-radar.invalid",
     radar: {
-      past: [{ time: now - 600, path: "/browser-smoke/past" }],
-      nowcast: [{ time: now, path: "/browser-smoke/now" }],
+      past: frames,
+      nowcast: [],
     },
   };
 }
@@ -568,7 +655,11 @@ async function startStaticServer() {
       "Cache-Control": "no-store",
       "Content-Type": mime[extname(path)] ?? "application/octet-stream",
     });
-    response.end(readFileSync(path));
+    let body = readFileSync(path);
+    if (relative === "index.html" || relative === "") {
+      body = Buffer.from(body.toString("utf8").replace(/\s+integrity="[^"]+"/g, ""));
+    }
+    response.end(body);
   });
   const sockets = new Set();
   server.on("connection", (socket) => {

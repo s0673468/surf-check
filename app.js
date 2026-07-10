@@ -828,6 +828,7 @@ function buildForecastTruthTemplate(scored, capturedAt = scored.forecastMetadata
     forecast: {
       score: scored.score.score,
       rawScore: scored.score.rawScore,
+      breakingHeightM: scored.score.detail?.breakingHeight ?? null,
       label: scored.score.label,
       algorithmVersion: scored.score.algorithmVersion,
       leadHours,

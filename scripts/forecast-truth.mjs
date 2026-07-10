@@ -38,6 +38,7 @@ export function compareTruthEntry(entry) {
   const forecastBand = scoreBandForScore(forecastScore);
   const observedBand = observedBandForRating(observedRating);
   const forecastHeightM = firstNumeric(
+    entry.forecast?.breakingHeightM,
     entry.forecast?.rawInputs?.waveHeight,
     entry.forecast?.sample?.waveHeightM,
     entry.forecast?.sample?.heightM,

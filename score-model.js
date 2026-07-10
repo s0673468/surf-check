@@ -210,7 +210,7 @@ function forecastDataQuality(beach, sample, dayOffset) {
     windGusts: Number.isFinite(sample.windGusts),
     wavePartition: Number.isFinite(sample.swellHeight) && Number.isFinite(sample.swellPeriod),
     windWavePartition: Number.isFinite(sample.windWaveHeight) && Number.isFinite(sample.windWavePeriod),
-    tide: Number.isFinite(sample.tideState),
+    tide: Number.isFinite(sample.seaLevel),
     weather: Number.isFinite(sample.precipitationProbability) || Number.isFinite(sample.cloudCover),
   };
   const missingEssential = Object.entries(essential)

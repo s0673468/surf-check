@@ -18,6 +18,7 @@
     "forecast": {
       "score": 52,
       "rawScore": 51.73,
+      "breakingHeightM": 1.0,
       "label": "workable",
       "algorithmVersion": "2.0.0",
       "leadHours": 24,

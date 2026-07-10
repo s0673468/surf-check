@@ -127,7 +127,12 @@ function summarizeConditions(scan, best, dayPeak) {
 // Best window + morning-vs-afternoon trend across the day. Returns the prose
 // keys plus the window hours describeDay needs for the rain watch-out.
 function summarizeTiming(hourBest, best, dayPeak) {
-  const goodThreshold = Math.max(50, dayPeak - 10);
+  const rankedScores = hourBest.map((entry) => entry.score).sort((a, b) => b - a);
+  const thirdBest = rankedScores[Math.min(2, rankedScores.length - 1)] ?? dayPeak;
+  // A single spike should not erase a genuinely durable window, but weak hours
+  // must never be padded into that window. Use the third-best hour to set a
+  // robust near-peak threshold, capped by the original dayPeak - 10 rule.
+  const goodThreshold = Math.max(50, Math.min(dayPeak - 10, thirdBest - 2));
   const goodHours = hourBest.filter((h) => h.score >= goodThreshold).map((h) => h.hour);
   const allDay = goodHours.length >= Math.ceil(HOURS.length * 0.7);
   const candidates = [];
@@ -135,6 +140,7 @@ function summarizeTiming(hourBest, best, dayPeak) {
   for (let index = 0; index <= sorted.length - 3; index += 1) {
     const window = sorted.slice(index, index + 3);
     if (window[2].hour - window[0].hour !== 2) continue;
+    if (window.some((entry) => entry.score < goodThreshold)) continue;
     candidates.push({
       hours: window.map((entry) => entry.hour),
       score: average(window.map((entry) => entry.score)),
@@ -143,7 +149,7 @@ function summarizeTiming(hourBest, best, dayPeak) {
   candidates.sort((a, b) => b.score - a.score || a.hours[0] - b.hours[0]);
   const windowHours = allDay
     ? goodHours
-    : candidates[0]?.hours ?? (goodHours.length ? goodHours.slice(0, 3) : [best.hour]);
+    : candidates[0]?.hours ?? (goodHours.length ? goodHours : [best.hour]);
   const windowCenter = average(windowHours);
 
   let windowKey = "midday";
