@@ -66,10 +66,16 @@ function shelterAttenuation(beach) {
 // its clean-swell energy reads the swell partition (see scoreSample), so wind-chop
 // still enters as dirt, not as free size.
 function effectiveWaveComponent(sample) {
-  if (Number.isFinite(sample.waveHeight) && Number.isFinite(sample.wavePeriod)) {
+  if (
+    Number.isFinite(sample.waveHeight) &&
+    (sample.waveHeight === 0 || Number.isFinite(sample.wavePeriod))
+  ) {
     return { height: sample.waveHeight, period: sample.wavePeriod, source: "combined" };
   }
-  if (Number.isFinite(sample.swellHeight) && Number.isFinite(sample.swellPeriod)) {
+  if (
+    Number.isFinite(sample.swellHeight) &&
+    (sample.swellHeight === 0 || Number.isFinite(sample.swellPeriod))
+  ) {
     return { height: sample.swellHeight, period: sample.swellPeriod, source: "primary" };
   }
   return { height: null, period: null, source: "missing" };
@@ -199,12 +205,14 @@ function windQualityFactor(beach, sample, sizeMag = 0.5) {
 
 function forecastDataQuality(beach, sample, dayOffset) {
   const component = effectiveWaveComponent(sample);
+  const hasWaveEnergy = Number.isFinite(component.height) && component.height > 0;
+  const hasWind = Number.isFinite(sample.windSpeed) && sample.windSpeed > 0;
   const essential = {
     waveHeight: Number.isFinite(component.height),
-    wavePeriod: Number.isFinite(component.period),
-    waveDirection: Number.isFinite(effDir(sample)),
+    wavePeriod: !hasWaveEnergy || Number.isFinite(component.period),
+    waveDirection: !hasWaveEnergy || Number.isFinite(effDir(sample)),
     windSpeed: Number.isFinite(sample.windSpeed),
-    windDirection: Number.isFinite(sample.windDirection),
+    windDirection: !hasWind || Number.isFinite(sample.windDirection),
   };
   const optional = {
     windGusts: Number.isFinite(sample.windGusts),

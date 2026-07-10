@@ -1021,6 +1021,42 @@ test("missing essential wave or wind fields are explicitly low-quality and unsco
   assert.match(scored.label, /insuficientes/i);
 });
 
+test("known flat and calm cells stay scorable without meaningless angles", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const flatCalm = {
+    ...cleanAlignedSample(beach, { height: 0, period: 10 }),
+    wavePeriod: null,
+    waveDirection: null,
+    swellHeight: 0,
+    swellPeriod: null,
+    swellDirection: null,
+    windSpeed: 0,
+    windDirection: null,
+  };
+  const scored = surf.scoreSample(beach, flatCalm, 0);
+  assert.equal(scored.dataQuality.scorable, true);
+  assert.equal(scored.status, "scored");
+  assert.ok(scored.score < 45, `known flat conditions should score Poor, got ${scored.score}`);
+});
+
+test("positive wave and wind magnitudes still require period and direction", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const missingWavePeriod = {
+    ...cleanAlignedSample(beach, { height: 1.2, period: 10 }),
+    wavePeriod: null,
+    swellHeight: null,
+    swellPeriod: null,
+  };
+  assert.equal(surf.scoreSample(beach, missingWavePeriod, 0).dataQuality.scorable, false);
+
+  const missingWindDirection = {
+    ...cleanAlignedSample(beach, { height: 1.2, period: 10 }),
+    windSpeed: 8,
+    windDirection: null,
+  };
+  assert.equal(surf.scoreSample(beach, missingWindDirection, 0).dataQuality.scorable, false);
+});
+
 test("neutralized tide state does not hide missing raw sea-level data", () => {
   const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
   const complete = cleanAlignedSample(beach, { height: 1.2, period: 10 });
