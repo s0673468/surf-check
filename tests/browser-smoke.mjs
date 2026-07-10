@@ -26,11 +26,18 @@ test(
         : "Chrome or Chromium is not installed",
   },
   async (t) => {
+    const hardStop = setTimeout(() => {
+      console.error("browser-smoke: exceeded 25 seconds; forcing the test process to exit");
+      process.exit(1);
+    }, 25_000);
+    hardStop.unref();
     assert.ok(CHROME_PATH, "Chrome or Chromium is required when the browser gate runs in CI");
     const server = await startStaticServer();
+    ciProgress("server started");
     let browser;
     try {
       browser = await launchChrome(CHROME_PATH);
+      ciProgress("Chrome started");
     } catch (error) {
       await server.close();
       throw error;
@@ -38,6 +45,7 @@ test(
     let page;
     try {
       page = await connectPage(browser.debugPort);
+      ciProgress("DevTools connected");
     } catch (error) {
       await browser.close();
       await server.close();
@@ -230,6 +238,7 @@ test(
           );
         }
       });
+      ciProgress("scenarios complete");
     } finally {
       try {
         await page.send("Browser.close");
@@ -239,6 +248,8 @@ test(
       await page.close();
       await browser.close();
       await server.close();
+      clearTimeout(hardStop);
+      ciProgress("cleanup complete");
     }
   },
 );
@@ -278,6 +289,7 @@ async function launchChrome(chromePath) {
     ],
     { stdio: "ignore" },
   );
+  child.unref();
 
   const portFile = join(profile, "DevToolsActivePort");
   let debugPort;
@@ -587,6 +599,10 @@ async function stopChildProcess(child) {
     once(child, "exit"),
     new Promise((resolvePromise) => setTimeout(resolvePromise, 1_000)),
   ]);
+}
+
+function ciProgress(message) {
+  if (process.env.CI === "true") console.log(`browser-smoke: ${message}`);
 }
 
 async function waitForValue(callback, timeoutMs, message) {
