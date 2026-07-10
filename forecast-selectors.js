@@ -15,6 +15,7 @@ function getForecastView(dayOffset = state.selectedDayOffset, hour = state.selec
     selectedScored: scoredByBeachId.get(beach.id) ?? null,
     scoredBeaches,
     rankedBeaches: [...scoredBeaches].sort(compareScoredEntries),
+    topGroup: nearTiedEntries(scoredBeaches),
     scoredByBeachId,
   };
 }
@@ -52,8 +53,23 @@ function getNearbyScoredBeachEntries(beach, dayOffset, hour, limit = 4) {
 function bestScoredEntry(entries) {
   if (!entries.length) return null;
   return entries.reduce((best, entry) =>
-    entry.scored.score.score > best.scored.score.score ? entry : best,
+    scoreValue(entry) > scoreValue(best) ? entry : best,
   );
+}
+
+function scoreValue(entry) {
+  const score = entry?.scored?.score ?? entry;
+  return Number.isFinite(score?.rawScore) ? score.rawScore : score?.score;
+}
+
+// Forecast inputs do not justify pretending a one- or two-point edge is
+// decisive. Return the leader plus every entry within the tolerance as one
+// recommendation group, ranked on the unrounded latent score.
+function nearTiedEntries(entries, tolerance = 3) {
+  if (!entries.length) return [];
+  const ranked = [...entries].sort(compareScoredEntries);
+  const top = scoreValue(ranked[0]);
+  return ranked.filter((entry) => top - scoreValue(entry) <= tolerance);
 }
 
 function groupScoredEntries(entries, keyFn) {
@@ -68,13 +84,15 @@ function groupScoredEntries(entries, keyFn) {
 }
 
 function compareScoredEntries(a, b) {
-  return b.scored.score.score - a.scored.score.score;
+  return scoreValue(b) - scoreValue(a);
 }
 
 // Descending comparator for flat `{ score }` entries (the prose layer's per-beach
 // and per-hour peak summaries).
 function compareByScoreDesc(a, b) {
-  return b.score - a.score;
+  const bScore = Number.isFinite(b.rawScore) ? b.rawScore : b.score;
+  const aScore = Number.isFinite(a.rawScore) ? a.rawScore : a.score;
+  return bScore - aScore;
 }
 
 // Scored samples are pure given (beach, day, hour, language) and the loaded
@@ -140,6 +158,7 @@ function computeScoredSample(beach, dayOffset, hour) {
     beach,
     sample,
     score: scoreSample(beach, sample, dayOffset),
+    forecastMetadata: forecast.metadata ?? null,
   };
 }
 

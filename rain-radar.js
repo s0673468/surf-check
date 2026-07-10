@@ -28,6 +28,7 @@ async function loadRadarFrames() {
     removeRadarLayer();
   } finally {
     updateRadarLayer();
+    if (typeof updateRadarStatus === "function") updateRadarStatus();
   }
 }
 

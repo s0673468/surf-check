@@ -191,7 +191,11 @@ function assertScoreResult(result, seed) {
   assert.ok(result.score >= 0 && result.score <= 100, `score out of range for seed ${seed}`);
   assert.equal(typeof result.label, "string");
   assert.ok(result.label.length > 0);
-  assert.ok(result.confidence >= 60 && result.confidence <= 94);
+  assert.ok(["high", "mid", "low"].includes(result.dataQuality.tier));
+  assert.equal(typeof result.dataQuality.scorable, "boolean");
+  assert.ok(result.dataQuality.completeness >= 0 && result.dataQuality.completeness <= 1);
+  assert.ok(Number.isFinite(result.rawScore));
+  assert.ok(result.rawScore >= 0 && result.rawScore <= 100);
   for (const [name, part] of Object.entries(result.parts)) {
     assert.ok(Number.isFinite(part), `score part ${name} must be finite for seed ${seed}`);
   }

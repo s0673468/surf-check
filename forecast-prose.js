@@ -52,10 +52,15 @@ function compactSessionRead(scored) {
   // A clean-fun rescued day scores well DESPITE low swell power, so the raw
   // limiting factor (always swell on these days) would contradict the call.
   // Surface the clean-fun read instead so the one-liner matches the score.
-  if ((scored.score.detail?.cleanFun ?? 0) >= 0.1) {
+  if ((scored.score.detail?.cleanFun ?? 0) >= 0.1 && scored.score.score >= 52) {
     return state.lang === "pt"
       ? `${scored.score.label}: pequeno mas limpo e glassy — vale a remada.`
       : `${scored.score.label}: small but clean and glassy — worth the paddle.`;
+  }
+  if ((scored.score.detail?.cleanFun ?? 0) >= 0.1) {
+    return state.lang === "pt"
+      ? `${scored.score.label}: pequeno e limpo, mas ainda com pouca força.`
+      : `${scored.score.label}: small and clean, but still short on power.`;
   }
   return `${scored.score.label}: ${reads[limiting.key]}.`;
 }
@@ -97,7 +102,7 @@ const DAY_PROSE = {
 function summarizeConditions(scan, best, dayPeak) {
   const peakHourEntries = scan.filter((e) => e.hour === best.hour);
   const repHeight = average(
-    peakHourEntries.map((e) => effHeight(e.scored.sample)),
+    peakHourEntries.map((e) => e.scored.score.detail?.breakingHeight),
   );
   const windQuality = average(peakHourEntries.map((e) => e.scored.score.parts.wind));
 
@@ -122,9 +127,29 @@ function summarizeConditions(scan, best, dayPeak) {
 // Best window + morning-vs-afternoon trend across the day. Returns the prose
 // keys plus the window hours describeDay needs for the rain watch-out.
 function summarizeTiming(hourBest, best, dayPeak) {
-  const goodThreshold = Math.max(50, dayPeak - 10);
+  const rankedScores = hourBest.map((entry) => entry.score).sort((a, b) => b - a);
+  const thirdBest = rankedScores[Math.min(2, rankedScores.length - 1)] ?? dayPeak;
+  // A single spike should not erase a genuinely durable window, but weak hours
+  // must never be padded into that window. Use the third-best hour to set a
+  // robust near-peak threshold, capped by the original dayPeak - 10 rule.
+  const goodThreshold = Math.max(50, Math.min(dayPeak - 10, thirdBest - 2));
   const goodHours = hourBest.filter((h) => h.score >= goodThreshold).map((h) => h.hour);
-  const windowHours = goodHours.length ? goodHours : [best.hour];
+  const allDay = goodHours.length >= Math.ceil(HOURS.length * 0.7);
+  const candidates = [];
+  const sorted = [...hourBest].sort((a, b) => a.hour - b.hour);
+  for (let index = 0; index <= sorted.length - 3; index += 1) {
+    const window = sorted.slice(index, index + 3);
+    if (window[2].hour - window[0].hour !== 2) continue;
+    if (window.some((entry) => entry.score < goodThreshold)) continue;
+    candidates.push({
+      hours: window.map((entry) => entry.hour),
+      score: average(window.map((entry) => entry.score)),
+    });
+  }
+  candidates.sort((a, b) => b.score - a.score || a.hours[0] - b.hours[0]);
+  const windowHours = allDay
+    ? goodHours
+    : candidates[0]?.hours ?? (goodHours.length ? goodHours : [best.hour]);
   const windowCenter = average(windowHours);
 
   let windowKey = "midday";
@@ -133,8 +158,6 @@ function summarizeTiming(hourBest, best, dayPeak) {
   else if (windowCenter <= 14) windowKey = "midday";
   else if (windowCenter <= 16) windowKey = "afternoon";
   else windowKey = "late";
-
-  const allDay = windowHours.length >= Math.ceil(HOURS.length * 0.7);
 
   const mAvg = average(hourBest.filter((h) => h.hour <= 10).map((h) => h.score));
   const aAvg = average(hourBest.filter((h) => h.hour >= 14).map((h) => h.score));
@@ -147,12 +170,22 @@ function summarizeTiming(hourBest, best, dayPeak) {
   return { windowHours, windowKey, allDay, trend };
 }
 
-// Best score per beach across the day, sorted descending → which spots to call
-// out in the prose layer.
-function pickTopBeaches(entriesByBeach) {
+// Rank beaches over the durable session window instead of mixing each beach's
+// unrelated one-hour maximum into one "best bets" sentence.
+function pickTopBeaches(entriesByBeach, windowHours) {
   return BEACHES.map((beach) => {
     const beachEntries = entriesByBeach.get(beach.id) ?? [];
-    return beachEntries.length ? { beach, score: bestScoredEntry(beachEntries).scored.score.score } : null;
+    const scoped = beachEntries.filter((entry) => windowHours.includes(entry.hour));
+    const scores = scoped
+      .map((entry) => scoreValue(entry))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    if (!scores.length) return null;
+    const middle = Math.floor(scores.length / 2);
+    const score = scores.length % 2
+      ? scores[middle]
+      : (scores[middle - 1] + scores[middle]) / 2;
+    return { beach, score };
   })
     .filter(Boolean)
     .sort(compareByScoreDesc);
@@ -177,17 +210,17 @@ function describeDay(dayOffset) {
     return hourEntries.length ? { hour, score: bestScoredEntry(hourEntries).scored.score.score } : null;
   }).filter(Boolean);
 
-  // Best score per beach across the day → which spots to call out.
-  const beachPeak = pickTopBeaches(entriesByBeach);
-
   // --- Conditions: representative size + cleanliness at the day's best hour ---
   const { sizeKey, cleanKey } = summarizeConditions(scan, best, dayPeak);
 
   // --- Timing: best window + morning vs afternoon trend ---
   const { windowHours, windowKey, allDay, trend } = summarizeTiming(hourBest, best, dayPeak);
 
+  // --- Spots: median score inside that same durable session window. ---
+  const beachWindow = pickTopBeaches(entriesByBeach, windowHours);
+
   // --- Watch-out: rain over the good window at the top beach ---
-  const topId = beachPeak[0]?.beach.id;
+  const topId = beachWindow[0]?.beach.id;
   const rainMax = Math.max(
     0,
     ...scan
@@ -219,8 +252,8 @@ function describeDay(dayOffset) {
   }
 
   // 3. Spots
-  const top = beachPeak[0];
-  const second = beachPeak[1];
+  const top = beachWindow[0];
+  const second = beachWindow[1];
   const useTwo = second && second.score >= 50 && second.score >= top.score - 7;
   if (top) {
     const name1 = top.beach.name;
@@ -306,8 +339,11 @@ const SWELL_PROSE = {
 };
 
 function describeSwell(beach, sample) {
-  const height = effHeight(sample);
+  const offshoreHeight = effHeight(sample);
   const period = effPeriod(sample);
+  const height = Number.isFinite(offshoreHeight) && Number.isFinite(period)
+    ? effectiveBreakingHeight(beach, offshoreHeight, period)
+    : null;
   const direction = effDir(sample);
   const directionDiff = angularDiff(direction, beach.swellCenter);
   const f = SWELL_PROSE[state.lang] ?? SWELL_PROSE.pt;
@@ -553,12 +589,15 @@ function describeWeather(sample) {
 
 
 function contrastReason(selectedScored, otherScored) {
+  const counterfactual = counterfactualContrastImpacts(selectedScored, otherScored);
   const selectedParts = selectedScored.score.parts;
   const otherParts = otherScored.score.parts;
   const factor = ["swell", "wind", "coastal", "tide", "weather"]
     .map((key) => ({
       key,
-      impact: Math.abs(selectedParts[key] - otherParts[key]) * SCORE_WEIGHTS[key],
+      // Prefer an actual rescore delta. The weighted part difference remains a
+      // compatibility fallback for hand-built/test objects without raw scores.
+      impact: counterfactual?.[key] ?? Math.abs(selectedParts[key] - otherParts[key]) * SCORE_WEIGHTS[key],
     }))
     .sort((a, b) => b.impact - a.impact)[0];
 
@@ -581,6 +620,37 @@ function contrastReason(selectedScored, otherScored) {
   return state.lang === "pt"
     ? "O tempo varia um pouco aqui, mas swell e vento ainda pesam mais que chuva ou nuvem."
     : "The weather grid is slightly different here, but swell and wind still matter more than rain or cloud.";
+}
+
+function counterfactualContrastImpacts(selectedScored, otherScored) {
+  const baseline = selectedScored.score.rawScore;
+  if (!Number.isFinite(baseline) || !selectedScored.sample || !otherScored.sample) return null;
+
+  const fields = {
+    swell: [
+      "waveHeight", "wavePeriod", "waveDirection",
+      "swellHeight", "swellPeriod", "swellDirection",
+      "secondarySwellHeight", "secondarySwellPeriod", "secondarySwellDirection",
+      "windWaveHeight", "windWavePeriod", "windWaveDirection",
+    ],
+    wind: ["windSpeed", "windDirection", "windGusts"],
+    tide: ["seaLevel", "nextSeaLevel", "tideState"],
+    weather: ["temperature", "precipitationProbability", "cloudCover"],
+  };
+  const impacts = {};
+  for (const [key, names] of Object.entries(fields)) {
+    const sample = { ...selectedScored.sample };
+    for (const name of names) sample[name] = otherScored.sample[name];
+    const rescored = scoreSample(selectedScored.beach, sample, selectedScored.score.dataQuality?.horizonDays ?? 0);
+    impacts[key] = Math.abs(baseline - rescored.rawScore);
+  }
+  const otherCoast = scoreSample(
+    otherScored.beach,
+    selectedScored.sample,
+    selectedScored.score.dataQuality?.horizonDays ?? 0,
+  );
+  impacts.coastal = Math.abs(baseline - otherCoast.rawScore);
+  return impacts;
 }
 
 function swellContrastReason(selectedScored, otherScored) {
@@ -691,19 +761,25 @@ function partTone(value) {
   return "poor";
 }
 
-// How much to trust this read, blending forecast HORIZON confidence (further-out
-// days are softer) with the spot's source DATA confidence (places like Brava and
-// Matadeiro rest on thin/contested priors — see docs/spot-research.md). Surfaced
-// as a small chip so a low-confidence spot reads as an estimate, not a measurement.
+// Qualitative input quality, not a probability of good surf. The score model
+// supplies completeness, required-field, horizon, and spot-evidence metadata;
+// the prose layer only localizes it.
 function confidenceMeta(scored) {
-  const horizon = clamp((scored.score.confidence ?? 60) / 100, 0, 1);
-  const data = clamp(scored.score.detail?.dataConfidence ?? 0.5, 0, 1);
-  const combined = clamp(horizon * (0.65 + 0.35 * data), 0, 1);
-  const pct = Math.round(combined * 100);
+  const quality = scored.score.dataQuality ?? { tier: "low", completeness: 0, missingEssential: [] };
   const pt = state.lang === "pt";
-  const title = pt ? `Confiança ~${pct}% (horizonte + dados do pico)` : `~${pct}% confidence (horizon + spot data)`;
-  if (combined >= 0.72) return { tier: "high", text: t("confHigh"), title };
-  if (combined >= 0.5) return { tier: "mid", text: t("confMid"), title };
-  return { tier: "low", text: t("confLow"), title };
+  const completeness = Math.round((quality.completeness ?? 0) * 100);
+  const spotEvidence = Math.round((quality.spotEvidence ?? 0) * 100);
+  const missing = quality.missingEssential?.length
+    ? quality.missingEssential.join(", ")
+    : (pt ? "nenhum campo essencial ausente" : "no essential fields missing");
+  const title = pt
+    ? `Qualidade da base: ${completeness}% dos campos, horizonte D+${quality.horizonDays ?? 0}, evidência local ${spotEvidence}%; ${missing}. Não é uma probabilidade de surf bom.`
+    : `Evidence quality: ${completeness}% of fields, D+${quality.horizonDays ?? 0} horizon, ${spotEvidence}% local evidence; ${missing}. This is not a probability of good surf.`;
+  const textByTier = pt
+    ? { high: "Base forte", mid: "Base moderada", low: "Base limitada" }
+    : { high: "Stronger evidence", mid: "Moderate evidence", low: "Limited evidence" };
+  const text = quality.scorable === false
+    ? (pt ? "Dados insuficientes" : "Insufficient data")
+    : textByTier[quality.tier] ?? textByTier.low;
+  return { tier: quality.tier, text, title };
 }
-

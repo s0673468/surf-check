@@ -26,10 +26,11 @@
 // can earn back on top of its power core.
 // ---------------------------------------------------------------------------
 const SIZE_REF = 0.8;
-const CLEAN_FUN_BONUS = 64;
+const CLEAN_FUN_BONUS = 50;
 const DEFAULT_MIN_SURF_HEIGHT = 0.6;
 const DEFAULT_FULL_SURF_HEIGHT = 0.95;
 const SHELTER_ENERGY_LOSS = 0.4; // a fully sheltered bay sheds ~40% of the open-coast breaking height
+const SURF_SCORE_VERSION = "2.0.0";
 
 function waveEnergy(height, period) {
   if (!Number.isFinite(height) || !Number.isFinite(period) || height <= 0 || period <= 0) {
@@ -64,21 +65,31 @@ function shelterAttenuation(beach) {
 // and the prose calls it "swell from X". Cleanliness is kept honest separately:
 // its clean-swell energy reads the swell partition (see scoreSample), so wind-chop
 // still enters as dirt, not as free size.
-function effHeight(sample) {
-  const candidates = [sample.waveHeight, sample.swellHeight].filter(Number.isFinite);
-  return candidates.length ? Math.max(...candidates) : null;
+function effectiveWaveComponent(sample) {
+  if (
+    Number.isFinite(sample.waveHeight) &&
+    (sample.waveHeight === 0 || Number.isFinite(sample.wavePeriod))
+  ) {
+    return { height: sample.waveHeight, period: sample.wavePeriod, source: "combined" };
+  }
+  if (
+    Number.isFinite(sample.swellHeight) &&
+    (sample.swellHeight === 0 || Number.isFinite(sample.swellPeriod))
+  ) {
+    return { height: sample.swellHeight, period: sample.swellPeriod, source: "primary" };
+  }
+  return { height: null, period: null, source: "missing" };
 }
 
-// Period for SHOALING and the period-quality multiplier. We size on the
-// combined sea (effHeight), but the combined wave_period is blended DOWN by any
-// windsea, so a clean long-period groundswell hidden under short chop would be
-// graded as chop. Take the longer of the combined and swell-partition periods
-// so that hidden groundswell keeps its quality. (Height stays the combined sea.)
+function effHeight(sample) {
+  return effectiveWaveComponent(sample).height;
+}
+
+// Height and period are selected as one physical component. Never attach a
+// partition's long period to the larger combined-sea height: that constructs a
+// wave the source model did not forecast.
 function effPeriod(sample) {
-  const wave = sample.wavePeriod;
-  const swell = sample.swellPeriod;
-  if (Number.isFinite(wave) && Number.isFinite(swell)) return Math.max(wave, swell);
-  return wave ?? swell;
+  return effectiveWaveComponent(sample).period;
 }
 
 function effDir(sample) {
@@ -192,6 +203,45 @@ function windQualityFactor(beach, sample, sizeMag = 0.5) {
   return clamp(factor, 0.03, 1);
 }
 
+function forecastDataQuality(beach, sample, dayOffset) {
+  const component = effectiveWaveComponent(sample);
+  const hasWaveEnergy = Number.isFinite(component.height) && component.height > 0;
+  const hasWind = Number.isFinite(sample.windSpeed) && sample.windSpeed > 0;
+  const essential = {
+    waveHeight: Number.isFinite(component.height),
+    wavePeriod: !hasWaveEnergy || Number.isFinite(component.period),
+    waveDirection: !hasWaveEnergy || Number.isFinite(effDir(sample)),
+    windSpeed: Number.isFinite(sample.windSpeed),
+    windDirection: !hasWind || Number.isFinite(sample.windDirection),
+  };
+  const optional = {
+    windGusts: Number.isFinite(sample.windGusts),
+    wavePartition: Number.isFinite(sample.swellHeight) && Number.isFinite(sample.swellPeriod),
+    windWavePartition: Number.isFinite(sample.windWaveHeight) && Number.isFinite(sample.windWavePeriod),
+    tide: Number.isFinite(sample.seaLevel),
+    weather: Number.isFinite(sample.precipitationProbability) || Number.isFinite(sample.cloudCover),
+  };
+  const missingEssential = Object.entries(essential)
+    .filter(([, present]) => !present)
+    .map(([field]) => field);
+  const presentCount = [...Object.values(essential), ...Object.values(optional)].filter(Boolean).length;
+  const completeness = presentCount / (Object.keys(essential).length + Object.keys(optional).length);
+  const spotEvidence = clamp(spotDataProfile(beach).dataConfidence ?? 0.5, 0, 1);
+  const scorable = missingEssential.length === 0;
+  let tier = "high";
+  if (!scorable || completeness < 0.6) tier = "low";
+  else if (dayOffset >= 2 || completeness < 0.85 || spotEvidence < 0.65) tier = "mid";
+
+  return {
+    tier,
+    scorable,
+    completeness: Math.round(completeness * 100) / 100,
+    missingEssential,
+    horizonDays: dayOffset,
+    spotEvidence,
+  };
+}
+
 function scoreSample(beach, sample, dayOffset) {
   const swellHeight = effHeight(sample) ?? 0;
   const swellPeriod = effPeriod(sample) ?? 0;
@@ -206,7 +256,10 @@ function scoreSample(beach, sample, dayOffset) {
   // energy; a short off-window one is just chop). Wind-wave = contamination.
   // This reads the swell PARTITION (not effHeight, which is the combined sea used
   // for size) so the windsea fraction below stays a true cleanliness measure.
-  const ePrimary = waveEnergy(sample.swellHeight ?? sample.waveHeight, sample.swellPeriod ?? sample.wavePeriod);
+  const hasPrimary = Number.isFinite(sample.swellHeight) && Number.isFinite(sample.swellPeriod);
+  const ePrimary = hasPrimary
+    ? waveEnergy(sample.swellHeight, sample.swellPeriod)
+    : waveEnergy(sample.waveHeight, sample.wavePeriod);
   const eSecondaryRaw = waveEnergy(sample.secondarySwellHeight, sample.secondarySwellPeriod);
   const secondaryWeight = clamp(
     periodCurve(sample.secondarySwellPeriod) *
@@ -229,7 +282,7 @@ function scoreSample(beach, sample, dayOffset) {
   const hb = effectiveBreakingHeight(beach, swellHeight, swellPeriod);
   const sizeMag = sizeMagnitude(hb);
   const periodFit = periodCurve(swellPeriod);
-  const sizeReadiness = surfableHeightFactor(swellHeight, beach);
+  const sizeReadiness = surfableHeightFactor(hb, beach);
 
   // Chop = windsea share of (windsea + clean swell), on a shared energy basis.
   const windseaFrac = eWind + eSwell > 0 ? clamp(eWind / (eWind + eSwell), 0, 1) : 0;
@@ -238,11 +291,12 @@ function scoreSample(beach, sample, dayOffset) {
   // Closeout: period-aware (long groundswell holds bigger), smooth toward ~0.15.
   const closeoutHeight =
     Number.isFinite(beach.maxHeight) && beach.maxHeight > 0
-      ? beach.maxHeight * clamp((swellPeriod / 11) ** 0.3, 0.85, 1.25)
+      ? effectiveBreakingHeight(beach, beach.maxHeight, 11) *
+        clamp((swellPeriod / 11) ** 0.65, 0.78, 1.45)
       : Infinity;
   const oversize =
-    Number.isFinite(swellHeight) && swellHeight > closeoutHeight
-      ? clamp(1 - 0.85 * ((swellHeight - closeoutHeight) / (0.5 * beach.maxHeight)), 0.15, 1)
+    Number.isFinite(hb) && hb > closeoutHeight
+      ? clamp(1 - 0.9 * ((hb - closeoutHeight) / (0.5 * beach.maxHeight)), 0.15, 1)
       : 1;
 
   const swellQuality = clamp(sizeMag * periodFit * cleanliness * oversize * sizeReadiness, 0, 1);
@@ -263,14 +317,16 @@ function scoreSample(beach, sample, dayOffset) {
   const core = potential * (0.12 + 0.88 * windFactor);
 
   // Clean-fun gates: the conditions that make a small day worth paddling out for.
-  // rideableSize is 0 at/below the surfable floor; glassiness wants light wind;
+  // The bonus is zero below the configured at-beach floor, then ramps across
+  // the full rideable band so the boundary stays continuous without a cliff.
   // notBig keeps this to genuinely small surf (fades out by head-high so a big
   // closeout never qualifies). Reused below for the context gate and the bonus.
   const surfFloor = surfableHeightFloor(beach);
-  const rideableSize = smoothstep(swellHeight, surfFloor, surfFloor * 1.4); // 0 at/below floor
-  const glassiness = clamp(1 - (sample.windSpeed ?? 0) / 16, 0, 1);
+  const rideableSize = smoothstep(hb, surfFloor, fullySurfableHeight(beach) * 1.05);
+  const windSpeed = Number.isFinite(sample.windSpeed) ? sample.windSpeed : 40;
+  const lightWind = 1 - smoothstep(windSpeed, 18, 34);
   const notBig = 1 - smoothstep(hb, 1.8, 2.7); // ~1 for small surf, ->0 for big/closeout
-  const calmCleanRideable = rideableSize * cleanliness * glassiness;
+  const calmCleanRideable = rideableSize * cleanliness * lightWind * windFactor;
 
   // Context (coastal depth fit, tide, weather) is small. It is gated by core so a
   // flat/blown hour cannot borrow from it, but a calm-clean-rideable day lets it
@@ -291,14 +347,17 @@ function scoreSample(beach, sample, dayOffset) {
   // swell columns would earn the bonus. It fades on score HEADROOM (not size), so it
   // lifts low-scoring small days yet can never invert a bigger/cleaner day below a
   // smaller one. notBig keeps it off big closeouts that score low for other reasons.
-  const groomedPeriod = smoothstep(swellPeriod, 4, 6.5); // real swell, not 3-5 s chop
-  const windNice = glassiness * windFactor; // light AND good-direction, not just calm
+  const groomedPeriod = smoothstep(swellPeriod, 3.5, 8); // broad ramp avoids a 5/6 s score cliff
+  const windNice = lightWind * windFactor; // light offshore may groom; only strong wind fades it
   const headroom = clamp(1 - baseScore / 0.82, 0, 1); // only rescues low-scoring days
   const cleanFun =
     rideableSize * cleanliness * groomedPeriod * windNice * directionFit * notBig * headroom;
 
-  const score = Math.round(clamp(100 * baseScore + CLEAN_FUN_BONUS * cleanFun, 0, 100));
-  const confidence = [94, 87, 76, 64][dayOffset] ?? 60;
+  let provisionalRawScore = clamp(100 * baseScore + CLEAN_FUN_BONUS * cleanFun, 0, 100);
+  if (hb < surfFloor) provisionalRawScore = Math.min(provisionalRawScore, 51.49);
+  const dataQuality = forecastDataQuality(beach, sample, dayOffset);
+  const rawScore = dataQuality.scorable ? provisionalRawScore : 0;
+  const score = Math.round(rawScore);
 
   const windDiff = angularDiff(sample.windDirection, beach.offshoreWind);
   const windQuality = windQualityText(windDiff, sample.windSpeed ?? 0);
@@ -307,8 +366,13 @@ function scoreSample(beach, sample, dayOffset) {
 
   return {
     score,
-    label: scoreLabel(score),
-    confidence,
+    rawScore: Math.round(rawScore * 100) / 100,
+    label: dataQuality.scorable
+      ? scoreLabel(score)
+      : (state.lang === "pt" ? "Dados insuficientes" : "Insufficient data"),
+    status: dataQuality.scorable ? "scored" : "unknown",
+    algorithmVersion: SURF_SCORE_VERSION,
+    dataQuality,
     parts: {
       swell: 100 * potential,
       wind: 100 * windFactor,
@@ -318,7 +382,10 @@ function scoreSample(beach, sample, dayOffset) {
     },
     detail: {
       energy: 0.49 * eSwell, // approx kW/m of clean swell, for the prose layer
+      provisionalRawScore: Math.round(provisionalRawScore * 100) / 100,
       breakingHeight: hb,
+      effectivePeriod: swellPeriod,
+      effectiveWaveSource: effectiveWaveComponent(sample).source,
       windseaFrac,
       sizeMag,
       sizeReadiness,

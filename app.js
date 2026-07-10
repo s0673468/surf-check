@@ -1,5 +1,6 @@
 const state = {
-  selectedBeachId: "ingleses",
+  selectedBeachId: null,
+  favoriteBeachId: null,
   selectedDayOffset: 0,
   selectedHour: initialSelectedHour(),
   lang: "pt",
@@ -8,6 +9,10 @@ const state = {
   markers: new Map(),
   loading: true,
   error: "",
+  failedBeachIds: [],
+  rankingsExpanded: false,
+  mapExpanded: false,
+  mapInteractionActive: false,
   radar: {
     error: "",
     host: "",
@@ -70,6 +75,11 @@ document.addEventListener("DOMContentLoaded", () => {
   elements.map = document.querySelector("#map");
   elements.fallbackMap = document.querySelector("#fallbackMap");
   elements.langToggle = document.querySelector("#langToggle");
+  elements.mapPanel = document.querySelector("#mapPanel");
+  elements.mapContent = document.querySelector("#mapContent");
+  elements.mapToggle = document.querySelector("[data-map-toggle]");
+  elements.mapActivate = document.querySelector("[data-map-activate]");
+  elements.radarStatus = document.querySelector("[data-radar-status]");
 
   let stored = null;
   try {
@@ -78,6 +88,12 @@ document.addEventListener("DOMContentLoaded", () => {
     /* ignore storage failures */
   }
   if (stored === "pt" || stored === "en") state.lang = stored;
+  try {
+    const favorite = window.localStorage.getItem("surf-favorite-beach");
+    if (BEACHES.some((beach) => beach.id === favorite)) state.favoriteBeachId = favorite;
+  } catch (error) {
+    /* ignore storage failures */
+  }
   document.documentElement.lang = state.lang === "pt" ? "pt-BR" : "en";
 
   if (elements.langToggle) {
@@ -85,6 +101,8 @@ document.addEventListener("DOMContentLoaded", () => {
       button.addEventListener("click", () => setLang(button.dataset.lang));
     });
   }
+
+  installMapDisclosure();
 
   syncStaticChrome();
   renderControls();
@@ -148,6 +166,18 @@ function syncStaticChrome() {
   if (controlStrip) controlStrip.setAttribute("aria-label", t("controlsAria"));
   const legend = document.querySelector(".map-legend");
   if (legend) legend.setAttribute("aria-label", t("legendAria"));
+  if (elements.rankedList) elements.rankedList.setAttribute("aria-label", t("recommendationsAria"));
+  if (elements.mapPanel) elements.mapPanel.setAttribute("aria-label", t("mapAria"));
+  if (elements.mapToggle) {
+    elements.mapToggle.setAttribute("aria-expanded", String(state.mapExpanded));
+    const label = elements.mapToggle.querySelector("[data-map-toggle-label]");
+    if (label) label.textContent = state.mapExpanded ? t("hideMap") : t("showMap");
+  }
+  if (elements.mapActivate) {
+    elements.mapActivate.textContent = state.mapInteractionActive ? t("mapZoomActive") : t("activateMapZoom");
+    elements.mapActivate.setAttribute("aria-pressed", String(state.mapInteractionActive));
+  }
+  updateRadarStatus();
 
   renderLegend();
   updateStatusBar();
@@ -157,6 +187,45 @@ function syncStaticChrome() {
       button.setAttribute("aria-pressed", button.dataset.lang === state.lang);
     });
   }
+}
+
+function isMobileLayout() {
+  return Boolean(window.matchMedia?.("(max-width: 720px)").matches);
+}
+
+function installMapDisclosure() {
+  const media = window.matchMedia?.("(max-width: 720px)");
+  const syncForViewport = (mobile) => {
+    state.mapExpanded = !mobile;
+    if (elements.mapContent) elements.mapContent.hidden = !state.mapExpanded;
+    elements.mapToggle?.setAttribute("aria-expanded", String(state.mapExpanded));
+    const label = elements.mapToggle?.querySelector("[data-map-toggle-label]");
+    if (label) label.textContent = state.mapExpanded ? t("hideMap") : t("showMap");
+    if (state.mapExpanded) window.requestAnimationFrame?.(() => state.map?.invalidateSize?.());
+  };
+  syncForViewport(Boolean(media?.matches));
+  media?.addEventListener?.("change", (event) => syncForViewport(event.matches));
+
+  elements.mapToggle?.addEventListener("click", () => {
+    state.mapExpanded = !state.mapExpanded;
+    if (elements.mapContent) elements.mapContent.hidden = !state.mapExpanded;
+    elements.mapToggle.setAttribute("aria-expanded", String(state.mapExpanded));
+    const label = elements.mapToggle.querySelector("[data-map-toggle-label]");
+    if (label) label.textContent = state.mapExpanded ? t("hideMap") : t("showMap");
+    if (state.mapExpanded) {
+      window.requestAnimationFrame?.(() => state.map?.invalidateSize?.());
+    }
+  });
+
+  elements.mapActivate?.addEventListener("click", () => {
+    state.mapInteractionActive = !state.mapInteractionActive;
+    if (state.map?.scrollWheelZoom) {
+      if (state.mapInteractionActive) state.map.scrollWheelZoom.enable();
+      else state.map.scrollWheelZoom.disable();
+    }
+    elements.mapActivate.setAttribute("aria-pressed", String(state.mapInteractionActive));
+    elements.mapActivate.textContent = state.mapInteractionActive ? t("mapZoomActive") : t("activateMapZoom");
+  });
 }
 
 function renderControls() {
@@ -236,7 +305,7 @@ function initializeMap() {
 
   state.map = L.map("map", {
     zoomControl: true,
-    scrollWheelZoom: true,
+    scrollWheelZoom: false,
   }).setView([-27.59, -48.46], 11);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -246,8 +315,9 @@ function initializeMap() {
 
   for (const beach of BEACHES) {
     const marker = L.marker([beach.lat, beach.lon], {
-      icon: makeMarkerIcon(null),
+      icon: makeMarkerIcon(null, beach, false),
       title: beach.name,
+      alt: t("mapMarkerEmpty", beach.name),
     })
       .addTo(state.map)
       .bindTooltip(beach.name, {
@@ -256,18 +326,20 @@ function initializeMap() {
         offset: [0, -18],
       })
       .on("click", () => {
-        state.selectedBeachId = beach.id;
-        render();
+        selectBeach(beach.id);
       });
     state.markers.set(beach.id, marker);
   }
 
+  updateRadarStatus();
   loadRadarFrames();
 }
 
 function initializeFallbackMap() {
   elements.map.hidden = true;
   elements.fallbackMap.hidden = false;
+  if (elements.mapActivate) elements.mapActivate.hidden = true;
+  if (elements.radarStatus) elements.radarStatus.textContent = t("mapFallback");
   elements.fallbackMap.innerHTML = '<div class="fallback-island"></div>';
 
   const bounds = {
@@ -283,25 +355,25 @@ function initializeFallbackMap() {
     button.className = "fallback-pin map-pin pin-empty";
     button.textContent = "--";
     button.title = beach.name;
+    button.setAttribute("aria-label", t("mapMarkerEmpty", beach.name));
     button.style.left = `${((beach.lon - bounds.lonMin) / (bounds.lonMax - bounds.lonMin)) * 100}%`;
     button.style.top = `${(1 - (beach.lat - bounds.latMin) / (bounds.latMax - bounds.latMin)) * 100}%`;
     button.addEventListener("click", () => {
-      state.selectedBeachId = beach.id;
-      render();
+      selectBeach(beach.id);
     });
     elements.fallbackMap.append(button);
     state.markers.set(beach.id, button);
   }
 }
 
-function makeMarkerIcon(score) {
-  const className = `map-pin ${pinClass(score)}`;
+function makeMarkerIcon(score, beach, selected = false) {
+  const className = `map-pin ${pinClass(score)}${selected ? " is-selected" : ""}`;
   const label = Number.isFinite(score) ? String(Math.round(score)) : "--";
   return L.divIcon({
     className: "",
-    html: `<div class="${className}">${label}</div>`,
-    iconSize: [38, 38],
-    iconAnchor: [19, 19],
+    html: `<div class="${className}" aria-hidden="true">${label}</div>`,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
   });
 }
 
@@ -322,6 +394,9 @@ async function loadForecasts() {
   state.loading = false;
   state.lastUpdated = fulfilled.length ? new Date() : null;
   state.loadedCount = fulfilled.length;
+  state.failedBeachIds = results.flatMap((result, index) =>
+    result.status === "rejected" ? [BEACHES[index].id] : [],
+  );
   updateStatusBar();
   render();
 }
@@ -329,16 +404,24 @@ async function loadForecasts() {
 // Renders the live-status pill in the current language (re-callable on toggle).
 function updateStatusBar() {
   if (state.loading) {
+    elements.statusPill?.removeAttribute("title");
     updateStatus("loading", t("loading"));
     return;
   }
   if (!state.loadedCount) {
     state.error = "unavailable";
+    elements.statusPill?.removeAttribute("title");
     updateStatus("error", t("unavailable"));
   } else if (state.loadedCount < BEACHES.length) {
+    const failed = state.failedBeachIds
+      .map((id) => BEACHES.find((beach) => beach.id === id)?.name)
+      .filter(Boolean)
+      .join(", ");
+    elements.statusPill?.setAttribute("title", t("partialDetails", failed));
     updateStatus("error", t("partial", state.loadedCount, BEACHES.length));
   } else {
-    updateStatus("ready", t("updated", formatClock(state.lastUpdated)));
+    elements.statusPill?.setAttribute("title", t("fetchTimeHelp"));
+    updateStatus("ready", t("fetched", formatClock(state.lastUpdated)));
   }
 }
 
@@ -366,6 +449,7 @@ function scheduleRenderData() {
 // controls — so dragging the hour slider stays smooth (the slider element is not
 // torn down mid-drag). Scoring is memoized, so this stays cheap to call live.
 function renderData() {
+  ensureSelectedBeach();
   const view = getForecastView();
 
   const dashboard = document.querySelector(".dashboard");
@@ -374,6 +458,7 @@ function renderData() {
   renderTemperatureStrip(view);
   syncRadarToSelection();
   updateRadarLayer();
+  updateRadarStatus();
 
   if (state.loading) {
     renderLoading();
@@ -391,6 +476,43 @@ function renderData() {
   renderRankedList(view);
   renderSelectedSummary(view);
   renderTimeline(view);
+}
+
+function updateRadarStatus() {
+  if (!elements.radarStatus) return;
+  if (!state.map) {
+    elements.radarStatus.textContent = t("mapFallback");
+    return;
+  }
+  if (state.radar.error) {
+    elements.radarStatus.textContent = t("radarUnavailable");
+    return;
+  }
+  const frame = selectedRadarFrame();
+  if (frame) {
+    elements.radarStatus.textContent = t(
+      "radarAt",
+      new Intl.DateTimeFormat(localeTag(), {
+        timeZone: TZ,
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(frame.time * 1000)),
+    );
+    return;
+  }
+  elements.radarStatus.textContent = state.radar.frames.length
+    ? t("radarNoMatch")
+    : t("radarLoading");
+}
+
+function ensureSelectedBeach() {
+  const entries = getScoredBeachEntries(state.selectedDayOffset, state.selectedHour);
+  if (!entries.length) return;
+  if (entries.some((entry) => entry.beach.id === state.selectedBeachId)) return;
+
+  const favorite = entries.find((entry) => entry.beach.id === state.favoriteBeachId);
+  const ranked = [...entries].sort(compareScoredEntries);
+  state.selectedBeachId = (favorite ?? ranked[0]).beach.id;
 }
 
 function renderLoading() {
@@ -422,7 +544,7 @@ function renderTemperatureStrip(view = getForecastView()) {
     : t("airWaterEmpty");
 
   elements.tempStrip.innerHTML = `
-    <span>${escapeHtml(formatDayHour(view.dayOffset, view.hour))}</span>
+    <span>${escapeHtml(t("regionalTempsAt", formatDayHour(view.dayOffset, view.hour)))}</span>
     <strong>${escapeHtml(label)}</strong>
   `;
 }
@@ -433,18 +555,27 @@ function updateMarkers(view = getForecastView()) {
     const scored = view.scoredByBeachId.get(beach.id);
     const score = scored?.score?.score;
     const label = Number.isFinite(score) ? String(Math.round(score)) : "--";
+    const selected = beach.id === state.selectedBeachId;
+    const markerLabel = Number.isFinite(score)
+      ? t("mapMarker", beach.name, label, scored.score.label, selected)
+      : t("mapMarkerEmpty", beach.name);
 
     if (state.map && marker?.setIcon) {
       // Only rebuild the divIcon when the rounded label (and thus the tier)
       // actually changed — a slider drag otherwise mints 11 fresh icons per step.
-      if (marker.__label !== label) {
-        marker.setIcon(makeMarkerIcon(score));
-        marker.__label = label;
+      const viewKey = `${label}:${selected}`;
+      if (marker.__viewKey !== viewKey) {
+        marker.setIcon(makeMarkerIcon(score, beach, selected));
+        marker.__viewKey = viewKey;
       }
-      marker.setZIndexOffset(beach.id === state.selectedBeachId ? 1000 : 0);
+      marker.setZIndexOffset(selected ? 1000 : 0);
+      marker.getElement?.()?.setAttribute("aria-label", markerLabel);
+      marker.getElement?.()?.setAttribute("aria-current", String(selected));
     } else if (marker) {
-      marker.className = `fallback-pin map-pin ${pinClass(score)}`;
+      marker.className = `fallback-pin map-pin ${pinClass(score)}${selected ? " is-selected" : ""}`;
       marker.textContent = label;
+      marker.setAttribute("aria-label", markerLabel);
+      marker.setAttribute("aria-current", String(selected));
     }
   }
 }
@@ -461,14 +592,25 @@ function renderSelectedSummary(view = getForecastView()) {
 
   const score = scored.score;
   const badgeClass = pinClass(score.score);
-  const conf = confidenceMeta(scored);
+  const quality = confidenceMeta(scored);
+  const favorite = beach.id === state.favoriteBeachId;
   elements.selectedSummary.innerHTML = `
-    <span class="panel-eyebrow">${escapeHtml(t("selectedSpot"))}</span>
+    <div class="selected-kicker">
+      <span class="panel-eyebrow">${escapeHtml(t("selectedSpotAt", formatDayHour(view.dayOffset, view.hour)))}</span>
+      <span class="selected-actions">
+        <button class="selected-action" type="button" data-truth-export aria-label="${escapeHtml(t("downloadTruth", beach.name))}" title="${escapeHtml(t("downloadTruthHelp"))}">
+          <span class="material-symbols-rounded" aria-hidden="true">download</span>
+        </button>
+        <button class="selected-action favorite-toggle" type="button" data-favorite-toggle aria-pressed="${favorite}" aria-label="${escapeHtml(favorite ? t("removeFavorite", beach.name) : t("saveFavorite", beach.name))}">
+          <span class="material-symbols-rounded" aria-hidden="true">${favorite ? "star" : "star_outline"}</span>
+        </button>
+      </span>
+    </div>
     <div class="summary-top">
       <div>
         <h2 class="beach-name">${escapeHtml(beach.name)}</h2>
         <p class="beach-meta">${escapeHtml(formatDayHour(view.dayOffset, view.hour))} · ${escapeHtml(tBeach(beach, "breakType"))}</p>
-        <span class="confidence-chip conf-${conf.tier}" title="${escapeHtml(conf.title)}">${escapeHtml(conf.text)}</span>
+        <span class="confidence-chip conf-${quality.tier}" title="${escapeHtml(quality.title)}">${escapeHtml(quality.text)}</span>
       </div>
       <div class="score-badge ${badgeClass}">
         <span class="score-number">${score.score}</span>
@@ -477,6 +619,13 @@ function renderSelectedSummary(view = getForecastView()) {
     </div>
     <p class="spot-read">${escapeHtml(buildSpotRead(scored))}</p>
   `;
+
+  elements.selectedSummary.querySelector("[data-favorite-toggle]")?.addEventListener("click", () => {
+    toggleFavorite(beach.id);
+  });
+  elements.selectedSummary.querySelector("[data-truth-export]")?.addEventListener("click", (event) => {
+    exportForecastTruthTemplate(scored, event.currentTarget);
+  });
 
   renderMetrics(scored);
 }
@@ -508,8 +657,8 @@ function renderMetrics(scored) {
     {
       icon: "water",
       label: t("tide"),
-      value: `${formatSigned(sample.seaLevel)} m`,
-      sub: `${score.tideTrend} · ${score.tideQuality}`,
+      value: `${tideStateWord(sample.tideState, state.lang === "pt")} · ${score.tideTrend}`,
+      sub: `${score.tideQuality} · ${t("mslReading", formatSigned(sample.seaLevel))}`,
       detail: tideRead.detail,
       tone: partTone(score.parts.tide),
     },
@@ -547,37 +696,65 @@ function renderRankedList(view = getForecastView()) {
 
   const title = formatDayHour(view.dayOffset, view.hour);
   const [top, ...rest] = scoredBeaches;
+  const topGroup = view.topGroup?.length
+    ? view.topGroup
+    : typeof nearTiedEntries === "function"
+      ? nearTiedEntries(scoredBeaches, 3)
+      : scoredBeaches.filter(
+          (entry) => Math.abs(entry.scored.score.score - top.scored.score.score) <= 3,
+        );
+  const missingBeachNames = state.failedBeachIds
+    .map((id) => BEACHES.find((beach) => beach.id === id)?.name)
+    .filter(Boolean);
+  const visibleRestCount = 2;
 
   elements.rankedList.innerHTML = `
     <div class="section-head">
       <h2><span class="head-icon material-symbols-rounded" aria-hidden="true">surfing</span>${escapeHtml(t("bestBets"))}</h2>
-      <span>${escapeHtml(title)}</span>
+      <span data-recommendation-scope>${escapeHtml(t("selectedHourScope", title))}</span>
     </div>
-    ${renderTopBet(top)}
-    <div class="beach-list">
-      ${rest.map(renderBeachRow).join("")}
+    ${missingBeachNames.length ? `<p class="partial-notice" data-partial-notice role="status">${escapeHtml(t("partialDetails", missingBeachNames.join(", ")))}</p>` : ""}
+    ${renderTopBet(top, topGroup)}
+    <div class="beach-list" id="rankedBeachList" data-rank-list>
+      ${rest
+        .map((entry, index) => renderBeachRow(entry, !state.rankingsExpanded && index >= visibleRestCount))
+        .join("")}
     </div>
+    ${rest.length > visibleRestCount ? `<button class="rank-toggle" type="button" data-rank-toggle aria-expanded="${state.rankingsExpanded}" aria-controls="rankedBeachList">${escapeHtml(state.rankingsExpanded ? t("showFewer") : t("showAllBeaches", scoredBeaches.length))}<span class="material-symbols-rounded" aria-hidden="true">${state.rankingsExpanded ? "expand_less" : "expand_more"}</span></button>` : ""}
   `;
 
   elements.rankedList.querySelectorAll("[data-beach-id]").forEach((row) => {
     row.addEventListener("click", () => {
-      state.selectedBeachId = row.dataset.beachId;
-      render();
+      selectBeach(row.dataset.beachId);
     });
+  });
+  elements.rankedList.querySelector("[data-rank-toggle]")?.addEventListener("click", () => {
+    state.rankingsExpanded = !state.rankingsExpanded;
+    renderRankedList(view);
   });
 }
 
-function renderTopBet({ beach, scored }) {
+function renderTopBet({ beach, scored }, topGroup = []) {
   const sample = scored.sample;
   const score = scored.score.score;
   const tier = pinClass(score).replace("pin-", "");
+  const quality = confidenceMeta(scored);
+  const support = supportFactor(scored.score.parts);
+  const limiting = limitingFactor(scored.score.parts);
+  const tiedNames = topGroup.map((entry) => entry.beach.name);
   return `
     <button class="bet-hero tier-${tier}" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}" aria-label="${escapeHtml(`${beach.name} · ${scored.score.label} · ${compactSessionRead(scored)}`)}">
       <span class="bet-hero-score ${pinClass(score)}">${score}</span>
       <span class="bet-hero-body">
-        <span class="bet-hero-tag">${escapeHtml(t("topPick", scored.score.label))}</span>
+        <span class="bet-hero-tag">${escapeHtml(t("topPickAt", scored.score.label, formatHour(state.selectedHour)))}</span>
         <span class="bet-hero-name">${escapeHtml(beach.name)}</span>
         <span class="bet-hero-read">${escapeHtml(compactSessionRead(scored))}</span>
+        ${topGroup.length > 1 ? `<span class="top-group-summary" data-top-group>${escapeHtml(t("topGroup", tiedNames.join(" · ")))}</span>` : ""}
+        <span class="decision-signals">
+          <span class="confidence-chip conf-${quality.tier}" title="${escapeHtml(quality.title)}">${escapeHtml(quality.text)}</span>
+          <span>${escapeHtml(t("supportDriver", support.label))}</span>
+          <span>${escapeHtml(t("watchDriver", limiting.label))}</span>
+        </span>
         <span class="bet-hero-stats">
           <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">waves</span><span class="mono">${formatSwellStat(sample)}</span></span>
           <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">air</span><span class="mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)} km/h</span></span>
@@ -587,11 +764,11 @@ function renderTopBet({ beach, scored }) {
   `;
 }
 
-function renderBeachRow({ beach, scored }) {
+function renderBeachRow({ beach, scored }, hidden = false) {
   const sample = scored.sample;
   const score = scored.score.score;
   return `
-    <button class="beach-row" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}" aria-label="${escapeHtml(`${beach.name} · ${scored.score.label}`)}">
+    <button class="beach-row" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}" data-rank-option aria-label="${escapeHtml(`${beach.name} · ${scored.score.label}`)}"${hidden ? " hidden" : ""}>
       <span class="row-score ${pinClass(score)}">${score}</span>
       <span class="row-copy">
         <span class="row-name">${escapeHtml(beach.name)}</span>
@@ -600,6 +777,123 @@ function renderBeachRow({ beach, scored }) {
       <span class="row-wind mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)}<small> km/h</small></span>
     </button>
   `;
+}
+
+function selectBeach(beachId, { revealOnMobile = true } = {}) {
+  if (!BEACHES.some((beach) => beach.id === beachId)) return;
+  state.selectedBeachId = beachId;
+  render();
+
+  if (!revealOnMobile || !isMobileLayout()) return;
+  const detail = document.querySelector("#selectedDetail");
+  const focusTarget = elements.selectedSummary;
+  window.requestAnimationFrame?.(() => {
+    focusTarget?.focus?.({ preventScroll: true });
+    detail?.scrollIntoView?.({
+      behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+  });
+}
+
+function toggleFavorite(beachId) {
+  state.favoriteBeachId = state.favoriteBeachId === beachId ? null : beachId;
+  try {
+    if (state.favoriteBeachId) {
+      window.localStorage.setItem("surf-favorite-beach", state.favoriteBeachId);
+    } else {
+      window.localStorage.removeItem("surf-favorite-beach");
+    }
+  } catch (error) {
+    /* ignore storage failures */
+  }
+  renderSelectedSummary();
+}
+
+function buildForecastTruthTemplate(scored, capturedAt = scored.forecastMetadata?.fetchedAt ?? new Date().toISOString()) {
+  const sample = scored.sample;
+  const metadata = scored.forecastMetadata ?? {};
+  const target = forecastLocalTimeToDate(sample.time);
+  const captured = new Date(capturedAt);
+  const leadHours = Number.isFinite(target?.getTime()) && Number.isFinite(captured.getTime())
+    ? Math.round(((target.getTime() - captured.getTime()) / 3_600_000) * 100) / 100
+    : null;
+  const timeSlug = sample.time?.slice(11, 16).replace(":", "") ?? "time";
+  return {
+    id: `${sample.time?.slice(0, 10) ?? "date"}-${scored.beach.id}-${timeSlug}`,
+    status: "template",
+    beachId: scored.beach.id,
+    capturedAt: Number.isFinite(captured.getTime()) ? captured.toISOString() : capturedAt,
+    targetTime: target?.toISOString() ?? sample.time,
+    forecast: {
+      score: scored.score.score,
+      rawScore: scored.score.rawScore,
+      breakingHeightM: scored.score.detail?.breakingHeight ?? null,
+      label: scored.score.label,
+      algorithmVersion: scored.score.algorithmVersion,
+      leadHours,
+      dataQuality: scored.score.dataQuality,
+      model: {
+        provider: metadata.provider ?? "unknown",
+        weatherModel: metadata.weather?.model ?? null,
+        marineModel: metadata.marine?.model ?? null,
+        weatherGrid: metadata.weather ?? null,
+        marineGrid: metadata.marine ?? null,
+      },
+      rawInputs: {
+        waveHeight: sample.waveHeight,
+        wavePeriod: sample.wavePeriod,
+        waveDirection: sample.waveDirection,
+        swellHeight: sample.swellHeight,
+        swellPeriod: sample.swellPeriod,
+        swellDirection: sample.swellDirection,
+        secondarySwellHeight: sample.secondarySwellHeight,
+        secondarySwellPeriod: sample.secondarySwellPeriod,
+        secondarySwellDirection: sample.secondarySwellDirection,
+        windWaveHeight: sample.windWaveHeight,
+        windWavePeriod: sample.windWavePeriod,
+        windWaveDirection: sample.windWaveDirection,
+        windSpeed: sample.windSpeed,
+        windDirection: sample.windDirection,
+        windGusts: sample.windGusts,
+        tideState: sample.tideState,
+        precipitationProbability: sample.precipitationProbability,
+        cloudCover: sample.cloudCover,
+      },
+    },
+    observed: {
+      rating: null,
+      heightM: null,
+      cleanliness: "",
+      board: "",
+      rater: "",
+      crowd: null,
+      accessNotes: "",
+      notes: "",
+    },
+    tags: [],
+  };
+}
+
+function forecastLocalTimeToDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value ?? "");
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match.map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hour + SAO_PAULO_UTC_OFFSET_HOURS, minute));
+}
+
+function exportForecastTruthTemplate(scored, button) {
+  const entry = buildForecastTruthTemplate(scored);
+  const text = `${JSON.stringify(entry, null, 2)}\n`;
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${entry.id}.json`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  button.setAttribute("aria-label", t("truthDownloaded", scored.beach.name));
+  button.title = t("truthDownloaded", scored.beach.name);
 }
 
 function renderTimeline(view = getForecastView()) {
@@ -640,8 +934,7 @@ function renderTimeline(view = getForecastView()) {
 
   elements.timelinePanel.querySelectorAll(".contrast-item[data-beach-id]").forEach((item) => {
     item.addEventListener("click", () => {
-      state.selectedBeachId = item.dataset.beachId;
-      render();
+      selectBeach(item.dataset.beachId);
     });
   });
 }
@@ -661,13 +954,17 @@ function renderDayOverview() {
   }
 
   elements.dayOverview.hidden = false;
+  const dayBest = bestScoredEntry(getDayScan(state.selectedDayOffset));
+  const peakScope = dayBest
+    ? t("dayPeakScope", dayBest.beach.name, formatHour(dayBest.hour))
+    : t("daySummary");
   elements.dayOverview.innerHTML = `
     <div class="day-overview-score ${pinClass(day.peakScore)}">
       <span class="day-overview-number">${day.peakScore}</span>
       <span class="day-overview-tier">${escapeHtml(day.peakLabel)}</span>
     </div>
     <div class="day-overview-body">
-      <span class="panel-eyebrow"><span class="material-symbols-rounded" aria-hidden="true">today</span>${escapeHtml(day.eyebrow)}</span>
+      <span class="panel-eyebrow"><span class="material-symbols-rounded" aria-hidden="true">today</span>${escapeHtml(`${day.eyebrow} · ${peakScope}`)}</span>
       <p class="day-overview-text">${escapeHtml(day.text)}</p>
     </div>
   `;

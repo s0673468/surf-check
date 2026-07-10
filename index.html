@@ -85,6 +85,13 @@
       </header>
 
       <main class="dashboard">
+        <section
+          class="best-bets"
+          id="rankedList"
+          data-recommendations
+          aria-label="Melhores praias no horário selecionado"
+        ></section>
+
         <section class="control-strip" aria-label="Forecast controls">
           <div class="control-group">
             <span class="control-label">Dia</span>
@@ -98,18 +105,32 @@
 
         <section class="day-overview" id="dayOverview" hidden></section>
 
-        <section class="hero-grid">
-          <div class="best-bets" id="rankedList"></div>
-          <div class="map-panel">
+        <section class="map-panel" id="mapPanel" aria-label="Mapa das praias e pontuações">
+          <button
+            class="map-disclosure"
+            type="button"
+            data-map-toggle
+            aria-expanded="false"
+            aria-controls="mapContent"
+          >
+            <span class="material-symbols-rounded" aria-hidden="true">map</span>
+            <span data-map-toggle-label>Mostrar mapa</span>
+            <span class="material-symbols-rounded map-disclosure-chevron" aria-hidden="true">expand_more</span>
+          </button>
+          <div class="map-content" id="mapContent" data-map-content hidden>
+            <button class="map-activation" type="button" data-map-activate aria-pressed="false">
+              Ativar zoom do mapa
+            </button>
+            <p class="radar-status" data-radar-status role="status">Carregando radar de chuva</p>
             <div id="map" class="map"></div>
             <div id="fallbackMap" class="fallback-map" hidden></div>
             <div class="map-legend" aria-label="Score legend"></div>
           </div>
         </section>
 
-        <section class="detail-grid">
+        <section class="detail-grid" id="selectedDetail" data-selected-detail>
           <aside class="side-panel">
-            <div class="selected-summary" id="selectedSummary"></div>
+            <div class="selected-summary" id="selectedSummary" tabindex="-1"></div>
             <div class="metric-grid" id="metricGrid"></div>
           </aside>
           <div class="timeline-panel" id="timelinePanel"></div>
