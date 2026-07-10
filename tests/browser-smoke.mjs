@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -18,6 +19,7 @@ const VIEWPORTS = [
 test(
   "rendered app preserves its mobile decision flow, accessibility, and failure states",
   {
+    timeout: 30_000,
     skip:
       CHROME_PATH || process.env.CI === "true"
         ? false
@@ -37,7 +39,7 @@ test(
     try {
       page = await connectPage(browser.debugPort);
     } catch (error) {
-      browser.close();
+      await browser.close();
       await server.close();
       throw error;
     }
@@ -230,7 +232,7 @@ test(
       });
     } finally {
       page.close();
-      browser.close();
+      await browser.close();
       await server.close();
     }
   },
@@ -263,6 +265,7 @@ async function launchChrome(chromePath) {
       "--disable-background-networking",
       "--disable-component-update",
       "--disable-default-apps",
+      "--disable-dev-shm-usage",
       "--disable-extensions",
       "--disable-sync",
       "--hide-scrollbars",
@@ -279,15 +282,15 @@ async function launchChrome(chromePath) {
       return Number(readFileSync(portFile, "utf8").split("\n")[0]) || null;
     }, 10_000, "Chrome did not expose a DevTools port");
   } catch (error) {
-    child.kill("SIGTERM");
+    await stopChildProcess(child);
     rmSync(profile, { recursive: true, force: true });
     throw error;
   }
 
   return {
     debugPort,
-    close() {
-      child.kill("SIGTERM");
+    async close() {
+      await stopChildProcess(child);
       rmSync(profile, { recursive: true, force: true });
     },
   };
@@ -524,12 +527,35 @@ async function startStaticServer() {
     });
     response.end(readFileSync(path));
   });
+  const sockets = new Set();
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  });
   await new Promise((resolvePromise) => server.listen(0, "127.0.0.1", resolvePromise));
   const address = server.address();
   return {
     url: `http://127.0.0.1:${address.port}`,
-    close: () => new Promise((resolvePromise) => server.close(resolvePromise)),
+    close: () => new Promise((resolvePromise) => {
+      for (const socket of sockets) socket.destroy();
+      server.close(resolvePromise);
+    }),
   };
+}
+
+async function stopChildProcess(child) {
+  if (child.exitCode !== null || child.signalCode) return;
+  child.kill("SIGTERM");
+  const exited = await Promise.race([
+    once(child, "exit").then(() => true),
+    new Promise((resolvePromise) => setTimeout(() => resolvePromise(false), 2_000)),
+  ]);
+  if (exited || child.exitCode !== null || child.signalCode) return;
+  child.kill("SIGKILL");
+  await Promise.race([
+    once(child, "exit"),
+    new Promise((resolvePromise) => setTimeout(resolvePromise, 1_000)),
+  ]);
 }
 
 async function waitForValue(callback, timeoutMs, message) {
