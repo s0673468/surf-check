@@ -370,7 +370,7 @@ async function launchChrome(chromePath) {
     }, 10_000, "Chrome did not expose a DevTools port");
   } catch (error) {
     await stopChildProcess(child);
-    rmSync(profile, { recursive: true, force: true });
+    removeBrowserProfile(profile);
     throw error;
   }
 
@@ -378,9 +378,24 @@ async function launchChrome(chromePath) {
     debugPort,
     async close() {
       await stopChildProcess(child);
-      rmSync(profile, { recursive: true, force: true });
+      removeBrowserProfile(profile);
     },
   };
+}
+
+function removeBrowserProfile(profile) {
+  try {
+    // Chrome subprocesses can briefly recreate files after the parent exits,
+    // especially on loaded hosted runners. Node's recursive removal can retry
+    // those transient ENOTEMPTY/EBUSY/EPERM races before treating them as real.
+    rmSync(profile, { recursive: true, force: true, maxRetries: 12, retryDelay: 100 });
+  } catch (error) {
+    if (["ENOTEMPTY", "EBUSY", "EPERM"].includes(error?.code)) {
+      ciProgress(`temporary Chrome profile cleanup deferred (${error.code})`);
+      return;
+    }
+    throw error;
+  }
 }
 
 async function connectPage(debugPort) {
