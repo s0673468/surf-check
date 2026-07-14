@@ -744,23 +744,66 @@ function renderTopBet({ beach, scored }, topGroup = []) {
   const tiedNames = topGroup.map((entry) => entry.beach.name);
   return `
     <button class="bet-hero tier-${tier}" type="button" aria-current="${beach.id === state.selectedBeachId}" data-beach-id="${beach.id}" aria-label="${escapeHtml(`${beach.name} · ${scored.score.label} · ${compactSessionRead(scored)}`)}">
-      <span class="bet-hero-score ${pinClass(score)}">${score}</span>
-      <span class="bet-hero-body">
-        <span class="bet-hero-tag">${escapeHtml(t("topPickAt", scored.score.label, formatHour(state.selectedHour)))}</span>
-        <span class="bet-hero-name">${escapeHtml(beach.name)}</span>
-        <span class="bet-hero-read">${escapeHtml(compactSessionRead(scored))}</span>
-        ${topGroup.length > 1 ? `<span class="top-group-summary" data-top-group>${escapeHtml(t("topGroup", tiedNames.join(" · ")))}</span>` : ""}
-        <span class="decision-signals">
-          <span class="confidence-chip conf-${quality.tier}" title="${escapeHtml(quality.title)}">${escapeHtml(quality.text)}</span>
-          <span>${escapeHtml(t("supportDriver", support.label))}</span>
-          <span>${escapeHtml(t("watchDriver", limiting.label))}</span>
-        </span>
-        <span class="bet-hero-stats">
-          <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">waves</span><span class="mono">${formatSwellStat(sample)}</span></span>
-          <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">air</span><span class="mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)} km/h</span></span>
+      <span class="bet-hero-decision">
+        <span class="bet-hero-score ${pinClass(score)}">${score}</span>
+        <span class="bet-hero-body">
+          <span class="bet-hero-tag">${escapeHtml(t("topPickAt", scored.score.label, formatHour(state.selectedHour)))}</span>
+          <span class="bet-hero-name">${escapeHtml(beach.name)}</span>
+          <span class="bet-hero-read">${escapeHtml(compactSessionRead(scored))}</span>
+          ${topGroup.length > 1 ? `<span class="top-group-summary" data-top-group>${escapeHtml(t("topGroup", tiedNames.join(" · ")))}</span>` : ""}
+          <span class="decision-signals">
+            <span class="confidence-chip conf-${quality.tier}" title="${escapeHtml(quality.title)}">${escapeHtml(quality.text)}</span>
+            <span>${escapeHtml(t("supportDriver", support.label))}</span>
+            <span>${escapeHtml(t("watchDriver", limiting.label))}</span>
+          </span>
+          <span class="bet-hero-stats">
+            <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">waves</span><span class="mono">${formatSwellStat(sample)}</span></span>
+            <span class="stat"><span class="material-symbols-rounded" aria-hidden="true">air</span><span class="mono">${degToCompass(sample.windDirection)} ${formatNumber(sample.windSpeed, 0)} km/h</span></span>
+          </span>
         </span>
       </span>
+      ${renderHeroWindow(beach)}
     </button>
+  `;
+}
+
+function renderHeroWindow(beach) {
+  const timeline = getScoredTimeline(beach, state.selectedDayOffset);
+  if (!timeline.length) return "";
+
+  const width = 300;
+  const height = 92;
+  const insetX = 8;
+  const insetY = 10;
+  const chartHeight = height - insetY * 2;
+  const step = timeline.length > 1 ? (width - insetX * 2) / (timeline.length - 1) : 0;
+  const points = timeline.map(({ hour, scored }, index) => {
+    const score = scored.score.score;
+    const x = insetX + index * step;
+    const y = insetY + ((100 - score) / 100) * chartHeight;
+    return { hour, score, x, y };
+  });
+  const line = points.map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const area = `M ${line.replaceAll(" ", " L ")} L ${(width - insetX).toFixed(1)} ${height - insetY} L ${insetX} ${height - insetY} Z`;
+
+  return `
+    <span class="bet-hero-window" data-hero-window aria-hidden="true">
+      <span class="hero-window-head">
+        <span>${escapeHtml(t("hourByHour"))}</span>
+        <span class="mono">${String(points[0].hour).padStart(2, "0")}–${String(points.at(-1).hour).padStart(2, "0")}</span>
+      </span>
+      <svg class="hero-window-chart" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+        <path class="hero-window-area" d="${area}"></path>
+        <polyline class="hero-window-line" points="${line}"></polyline>
+        ${points
+          .map(
+            ({ hour, x, y }) =>
+              `<circle class="hero-window-point${hour === state.selectedHour ? " is-current" : ""}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${hour === state.selectedHour ? 4 : 2.5}"></circle>`,
+          )
+          .join("")}
+      </svg>
+      <span class="hero-window-axis mono"><span>${String(points[0].hour).padStart(2, "0")}</span><span>${String(points[Math.floor(points.length / 2)].hour).padStart(2, "0")}</span><span>${String(points.at(-1).hour).padStart(2, "0")}</span></span>
+    </span>
   `;
 }
 

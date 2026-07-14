@@ -199,6 +199,71 @@ test(
         );
       });
 
+      await t.test("uses the restrained decision-first visual hierarchy", async () => {
+        await load("complete", VIEWPORTS[2]);
+        const hierarchy = await page.evaluate(`(() => {
+          const root = getComputedStyle(document.documentElement);
+          const hero = document.querySelector('.bet-hero');
+          const peerRows = [...document.querySelectorAll('.beach-row')];
+          const metrics = [...document.querySelectorAll('.metric')];
+          const isFlat = (element) => {
+            const style = getComputedStyle(element);
+            return style.boxShadow === 'none'
+              && style.backgroundColor === 'rgba(0, 0, 0, 0)';
+          };
+          return {
+            tokens: {
+              canvas: root.getPropertyValue('--canvas').trim(),
+              chrome: root.getPropertyValue('--sidebar').trim(),
+              surface: root.getPropertyValue('--panel').trim(),
+              inset: root.getPropertyValue('--panel-raised').trim(),
+              secondary: root.getPropertyValue('--secondary').trim(),
+              border: root.getPropertyValue('--border').trim(),
+              primary: root.getPropertyValue('--fg1').trim(),
+              secondaryText: root.getPropertyValue('--fg2').trim(),
+              muted: root.getPropertyValue('--fg3').trim(),
+            },
+            heroWindow: Boolean(hero?.querySelector('[data-hero-window]')),
+            heroWindowPoints: hero?.querySelectorAll('[data-hero-window] .hero-window-point').length ?? 0,
+            heroRadius: hero ? getComputedStyle(hero).borderRadius : null,
+            heroShadow: hero ? getComputedStyle(hero).boxShadow : null,
+            flatPeers: peerRows.length > 0 && peerRows.every(isFlat),
+            flatMetrics: metrics.length > 0 && metrics.every(isFlat),
+          };
+        })()`);
+
+        assert.deepEqual(hierarchy.tokens, {
+          canvas: "#111319",
+          chrome: "#151821",
+          surface: "#1a1e27",
+          inset: "#0e1016",
+          secondary: "#20242d",
+          border: "#2a303b",
+          primary: "#f2f4f7",
+          secondaryText: "#b4bac5",
+          muted: "#9198a4",
+        });
+        assert.equal(hierarchy.heroWindow, true);
+        assert.ok(hierarchy.heroWindowPoints >= 4);
+        assert.equal(hierarchy.heroRadius, "20px");
+        assert.equal(hierarchy.heroShadow, "none");
+        assert.equal(hierarchy.flatPeers, true);
+        assert.equal(hierarchy.flatMetrics, true);
+
+        await load("complete", VIEWPORTS[0]);
+        const narrow = await page.evaluate(`(() => {
+          const hero = document.querySelector('.bet-hero');
+          const window = hero?.querySelector('[data-hero-window]');
+          return {
+            columns: hero ? getComputedStyle(hero).gridTemplateColumns : null,
+            windowWidth: window?.getBoundingClientRect().width ?? 0,
+            heroWidth: hero?.getBoundingClientRect().width ?? 0,
+          };
+        })()`);
+        assert.ok(narrow.windowWidth > 0);
+        assert.ok(narrow.windowWidth <= narrow.heroWidth + 1);
+      });
+
       await t.test("localizes the rendered interface and selection reveals matching detail", async () => {
         await page.evaluate(`document.querySelector('[data-lang="en"]').click()`);
         await page.waitFor(`document.documentElement.lang === 'en'`);
@@ -301,6 +366,19 @@ test(
             client: document.documentElement.clientWidth,
             scroll: document.documentElement.scrollWidth,
             body: document.body.scrollWidth,
+            offenders: [...document.querySelectorAll('body *')]
+              .filter((element) => {
+                const rect = element.getBoundingClientRect();
+                return rect.right > document.documentElement.clientWidth + 1 || rect.left < -1;
+              })
+              .slice(0, 8)
+              .map((element) => ({
+                className: element.className?.baseVal ?? element.className ?? '',
+                tag: element.tagName,
+                left: Math.round(element.getBoundingClientRect().left),
+                right: Math.round(element.getBoundingClientRect().right),
+                scrollWidth: element.scrollWidth,
+              })),
           })`);
           assert.ok(
             dimensions.scroll <= dimensions.client + 1 && dimensions.body <= dimensions.client + 1,
