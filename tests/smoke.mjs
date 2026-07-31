@@ -1304,6 +1304,42 @@ test("fetchJson retries transient failures before returning data", async () => {
   );
 });
 
+test("fetchJson retries a failed body parse before returning data", async () => {
+  // A 200 whose body is truncated mid-response is exactly the transient the
+  // retry loop exists to absorb. Returning the json() promise unawaited let
+  // that rejection settle after the try block had exited, so it escaped the
+  // loop and failed after one attempt.
+  let attempts = 0;
+
+  await withMockedBrowserIO(
+    {
+      fetch: async () => {
+        attempts += 1;
+        const failingBody = attempts < 3;
+        return {
+          ok: true,
+          async json() {
+            if (failingBody) {
+              throw new Error("body truncated mid-response");
+            }
+            return { attempts };
+          },
+        };
+      },
+      setTimeout: (callback) => {
+        callback();
+        return 0;
+      },
+    },
+    async () => {
+      assert.deepEqual(await surf.fetchJson(new URL("https://example.test/forecast")), {
+        attempts: 3,
+      });
+      assert.equal(attempts, 3);
+    },
+  );
+});
+
 test("fetchJson retries retryable HTTP failures before returning data", async () => {
   let attempts = 0;
   let delays = 0;

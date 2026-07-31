@@ -105,7 +105,9 @@ async function fetchJson(url) {
         error.retryable = isRetryableHttpStatus(response.status);
         throw error;
       }
-      return response.json();
+      // await, so a rejected body parse is caught by this try and retried
+      // like any other transient failure.
+      return await response.json();
     } catch (error) {
       lastError = error;
       if (attempt < 2 && error.retryable !== false) {
