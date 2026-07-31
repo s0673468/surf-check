@@ -120,6 +120,7 @@ document.addEventListener("DOMContentLoaded", () => {
 function installSessionRefresh() {
   let loadedDate = dateKey(0);
   const STALE_MS = 30 * 60 * 1000;
+  const REFRESH_CHECK_MS = 60 * 1000;
   const refreshIfStale = () => {
     if (state.loading) return;
     const today = dateKey(0);
@@ -140,6 +141,7 @@ function installSessionRefresh() {
     window.addEventListener("online", () => loadForecasts());
     window.addEventListener("focus", refreshIfStale);
   }
+  window.setInterval?.(refreshIfStale, REFRESH_CHECK_MS);
 }
 
 // Updates the static page chrome (title, headings, control labels, footer,
@@ -250,7 +252,7 @@ function renderControls() {
   }
 
   const nowHour = initialSelectedHour();
-  const isNow = state.selectedDayOffset === 0 && state.selectedHour === nowHour;
+  const isNow = isNowSelection(state.selectedDayOffset, state.selectedHour, nowHour);
   elements.hourControls.innerHTML = `
     <div class="hour-slider-shell">
       <div class="hour-slider-top">
@@ -295,6 +297,15 @@ function renderControls() {
       render();
     });
   }
+}
+
+function isNowSelection(dayOffset, selectedHour, currentHour = initialSelectedHour()) {
+  return (
+    dayOffset === 0 &&
+    currentHour >= HOUR_MIN &&
+    currentHour <= HOUR_MAX &&
+    selectedHour === currentHour
+  );
 }
 
 function initializeMap() {
@@ -377,26 +388,46 @@ function makeMarkerIcon(score, beach, selected = false) {
   });
 }
 
+let forecastLoadGeneration = 0;
+
+function beginForecastLoad() {
+  forecastLoadGeneration += 1;
+  return forecastLoadGeneration;
+}
+
+function applyForecastResults(results, generation) {
+  if (generation !== forecastLoadGeneration) return false;
+
+  const fulfilled = results.filter((result) => result.status === "fulfilled");
+  if (fulfilled.length) {
+    state.forecasts.clear();
+    scoredSampleCache.clear();
+    for (const result of fulfilled) {
+      state.forecasts.set(result.value.beachId, result.value);
+    }
+    state.lastUpdated = new Date();
+    state.loadedCount = fulfilled.length;
+  } else {
+    // Keep a working snapshot visible when a refresh loses the network after
+    // the previous load succeeded. Its timestamp stays bound to that snapshot.
+    state.loadedCount = 0;
+  }
+
+  state.loading = false;
+  state.failedBeachIds = results.flatMap((result, index) =>
+    result.status === "rejected" ? [BEACHES[index].id] : [],
+  );
+  return true;
+}
+
 async function loadForecasts() {
+  const generation = beginForecastLoad();
   updateStatus("loading", t("loading"));
   state.loading = true;
   state.error = "";
 
   const results = await Promise.allSettled(BEACHES.map(fetchBeachForecast));
-  const fulfilled = results.filter((result) => result.status === "fulfilled");
-
-  state.forecasts.clear();
-  scoredSampleCache.clear();
-  for (const result of fulfilled) {
-    state.forecasts.set(result.value.beachId, result.value);
-  }
-
-  state.loading = false;
-  state.lastUpdated = fulfilled.length ? new Date() : null;
-  state.loadedCount = fulfilled.length;
-  state.failedBeachIds = results.flatMap((result, index) =>
-    result.status === "rejected" ? [BEACHES[index].id] : [],
-  );
+  if (!applyForecastResults(results, generation)) return;
   updateStatusBar();
   render();
 }
@@ -584,7 +615,7 @@ function renderSelectedSummary(view = getForecastView()) {
   const beach = view.selectedBeach;
   const scored = view.selectedScored;
 
-  if (!scored) {
+  if (!scored || scored.score?.status === "unknown" || scored.score?.dataQuality?.scorable === false) {
     elements.selectedSummary.innerHTML = `<div class="empty-state">${escapeHtml(t("noForecastHour"))}</div>`;
     elements.metricGrid.innerHTML = "";
     return;

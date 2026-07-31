@@ -17,6 +17,8 @@ const OBSERVED_BANDS = new Map([
   [5, { band: "excellent", ordinal: 5 }],
 ]);
 
+const SCORE_MODEL_VERSION = readScoreModelVersion();
+
 export function loadTruthLedgerFromFile(pathOrUrl) {
   return JSON.parse(readFileSync(pathOrUrl, "utf8"));
 }
@@ -91,11 +93,14 @@ export function analyzeTruthLedger(ledger) {
   if (ledger.schemaVersion === 2 && !nonBlankString(ledger.algorithmVersion)) {
     throw new Error("forecast truth ledger schemaVersion 2 requires algorithmVersion");
   }
+  if (ledger.schemaVersion === 2 && ledger.algorithmVersion !== SCORE_MODEL_VERSION) {
+    throw new Error("forecast truth ledger algorithmVersion does not match score-model.js SURF_SCORE_VERSION");
+  }
 
   const comparisons = ledger.entries
     .filter((entry) => entry.status !== "template" && entry.status !== "example")
     .map((entry) => {
-      validateEntry(entry, ledger.schemaVersion);
+      validateEntry(entry, ledger.schemaVersion, ledger.algorithmVersion);
       return compareTruthEntry(entry);
     });
 
@@ -156,7 +161,7 @@ export function formatTruthSummary(analysis) {
   return lines.join("\n");
 }
 
-function validateEntry(entry, schemaVersion = 1) {
+function validateEntry(entry, schemaVersion = 1, ledgerAlgorithmVersion = null) {
   for (const key of ["id", "beachId", "targetTime"]) {
     if (!entry?.[key]) throw new Error(`forecast truth entry is missing ${key}`);
   }
@@ -169,6 +174,12 @@ function validateEntry(entry, schemaVersion = 1) {
     }
     if (!nonBlankString(entry.forecast?.algorithmVersion)) {
       throw new Error(`forecast truth entry ${entry.id} is missing forecast.algorithmVersion`);
+    }
+    if (entry.forecast.algorithmVersion !== ledgerAlgorithmVersion) {
+      throw new Error(`forecast truth entry ${entry.id} algorithmVersion does not match ledger.algorithmVersion`);
+    }
+    if (entry.forecast.algorithmVersion !== SCORE_MODEL_VERSION) {
+      throw new Error(`forecast truth entry ${entry.id} algorithmVersion does not match score-model.js SURF_SCORE_VERSION`);
     }
     if (!entry.forecast?.rawInputs || typeof entry.forecast.rawInputs !== "object") {
       throw new Error(`forecast truth entry ${entry.id} is missing forecast.rawInputs`);
@@ -194,6 +205,13 @@ function validateEntry(entry, schemaVersion = 1) {
   if (!OBSERVED_BANDS.has(observedRating)) {
     throw new Error(`forecast truth entry ${entry.id} has observed.rating outside 1..5`);
   }
+}
+
+function readScoreModelVersion() {
+  const source = readFileSync(fileURLToPath(new URL("../score-model.js", import.meta.url)), "utf8");
+  const match = source.match(/\bconst\s+SURF_SCORE_VERSION\s*=\s*["']([^"']+)["']/);
+  if (!match) throw new Error("score-model.js SURF_SCORE_VERSION is missing");
+  return match[1];
 }
 
 function surfableClassification(comparisons) {

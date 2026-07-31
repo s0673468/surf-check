@@ -79,16 +79,22 @@ function selectedForecastTimestampSeconds(
   return Date.UTC(year, month - 1, day, hour + SAO_PAULO_UTC_OFFSET_HOURS, 0, 0) / 1000;
 }
 
-function dateKey(offset) {
-  const now = new Date();
-  const target = new Date(now);
-  target.setDate(now.getDate() + offset);
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(target);
+function dateKey(offset, now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: TZ,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    })
+      .formatToParts(now)
+      .filter(({ type }) => ["year", "month", "day"].includes(type))
+      .map(({ type, value }) => [type, Number(value)]),
+  );
+  const target = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + offset));
+  return [target.getUTCFullYear(), target.getUTCMonth() + 1, target.getUTCDate()]
+    .map((value) => String(value).padStart(2, "0"))
+    .join("-");
 }
 
 function formatDay(offset) {
