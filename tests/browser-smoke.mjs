@@ -90,9 +90,12 @@ test(
         : "Chrome or Chromium is not installed",
   },
   async (t) => {
+    let hardStopError = null;
+    let page;
     const hardStop = setTimeout(() => {
-      console.error("browser-smoke: exceeded 25 seconds; forcing the test process to exit");
-      process.exit(1);
+      hardStopError = new Error("browser-smoke exceeded 25 seconds");
+      console.error("browser-smoke: exceeded 25 seconds; allowing the cleanup finally to run");
+      page?.fail(hardStopError);
     }, 25_000);
     hardStop.unref();
     assert.ok(CHROME_PATH, "Chrome or Chromium is required when the browser gate runs in CI");
@@ -106,9 +109,9 @@ test(
       await server.close();
       throw error;
     }
-    let page;
     try {
       page = await connectPage(browser.debugPort);
+      if (hardStopError) throw hardStopError;
       ciProgress("DevTools connected");
     } catch (error) {
       await browser.close();

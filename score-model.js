@@ -364,8 +364,9 @@ function scoreSample(beach, sample, dayOffset) {
   const rawScore = dataQuality.scorable ? provisionalRawScore : 0;
   const score = Math.round(rawScore);
 
+  const windDirectionKnown = Number.isFinite(sample.windDirection);
   const windDiff = angularDiff(sample.windDirection, beach.offshoreWind);
-  const windQuality = windQualityText(windDiff, sample.windSpeed ?? 0);
+  const windQuality = windQualityText(windDiff, sample.windSpeed ?? 0, windDirectionKnown);
   const tideTrend = tideTrendText(sample.seaLevel, sample.nextSeaLevel);
   const tideQuality = tideQualityText(tideFit);
 
@@ -408,7 +409,7 @@ function scoreSample(beach, sample, dayOffset) {
     tideQuality,
     reasons: buildReasons({
       sample,
-      height: swellHeight,
+      height: hb,
       period: swellPeriod,
       swellDirection,
       coastal: 100 * coastalFit,
@@ -558,7 +559,8 @@ function tideQualityText(score) {
   return labels[3];
 }
 
-function windQualityText(diff, speed) {
+function windQualityText(diff, speed, directionKnown = true) {
+  if (!directionKnown) return state.lang === "pt" ? "vento sem direção" : "unknown wind";
   if (state.lang === "pt") {
     const strength = speed >= 26 ? "forte" : speed >= 15 ? "moderado" : "leve";
     if (diff <= 45) return `terral ${strength}`;

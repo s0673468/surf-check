@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import { fileURLToPath } from "node:url";
 import {
   analyzeTruthLedger,
   formatTruthSummary,
@@ -16,6 +18,7 @@ const runtimeScriptFiles = Array.from(
 const runtimeSources = runtimeScriptFiles.map((file) =>
   readFileSync(new URL(`../${file}`, import.meta.url), "utf8"),
 );
+const browserSmokeSource = readFileSync(new URL("./browser-smoke.mjs", import.meta.url), "utf8");
 const context = {
   console,
   URL,
@@ -92,12 +95,187 @@ globalThis.__surfCheckTest = {
   summarizeConditions,
   summarizeTiming,
   scoredSampleCache,
+  elements,
+  renderSelectedSummary,
+  beginForecastLoad,
+  applyForecastResults,
+  installSessionRefresh,
+  isNowSelection,
 };`,
   context,
   { filename: "app.js" },
 );
 
 const surf = context.__surfCheckTest;
+
+test("unscorable selected summaries do not show directional wind or metric grids", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "matadeiro");
+  const sample = {
+    ...cleanAlignedSample(beach),
+    windSpeed: 18,
+    windDirection: null,
+  };
+  surf.state.lang = "en";
+  const score = surf.scoreSample(beach, sample, 0);
+  assert.equal(score.status, "unknown");
+  assert.equal(score.windQuality, "unknown wind");
+
+  const summary = {
+    innerHTML: "",
+    querySelector() {
+      return null;
+    },
+  };
+  const metricGrid = { innerHTML: "stale metrics" };
+  const previousSummary = surf.elements.selectedSummary;
+  const previousMetricGrid = surf.elements.metricGrid;
+  surf.elements.selectedSummary = summary;
+  surf.elements.metricGrid = metricGrid;
+  try {
+    surf.renderSelectedSummary({ selectedBeach: beach, selectedScored: { beach, sample, score } });
+    assert.equal(metricGrid.innerHTML, "");
+    assert.match(summary.innerHTML, /No forecast for this beach and hour/);
+  } finally {
+    surf.elements.selectedSummary = previousSummary;
+    surf.elements.metricGrid = previousMetricGrid;
+  }
+});
+
+test("forecast loads commit only the latest generation", () => {
+  surf.state.forecasts.clear();
+  const existing = { beachId: "existing" };
+  surf.state.forecasts.set(existing.beachId, existing);
+
+  const olderGeneration = surf.beginForecastLoad();
+  const newerGeneration = surf.beginForecastLoad();
+  assert.equal(
+    surf.applyForecastResults(
+      [{ status: "fulfilled", value: { beachId: "older" } }],
+      olderGeneration,
+    ),
+    false,
+  );
+  assert.deepEqual([...surf.state.forecasts.keys()], ["existing"]);
+
+  assert.equal(
+    surf.applyForecastResults(
+      [{ status: "fulfilled", value: { beachId: "newer" } }],
+      newerGeneration,
+    ),
+    true,
+  );
+  assert.deepEqual([...surf.state.forecasts.keys()], ["newer"]);
+});
+
+test("a fully failed refresh keeps the last working forecast snapshot", () => {
+  const snapshot = { beachId: "existing", marker: "working" };
+  const lastUpdated = new Date("2026-07-31T10:00:00.000Z");
+  surf.state.forecasts.clear();
+  surf.state.forecasts.set(snapshot.beachId, snapshot);
+  surf.scoredSampleCache.clear();
+  surf.scoredSampleCache.set("existing-cache", { marker: "working" });
+  surf.state.lastUpdated = lastUpdated;
+
+  const generation = surf.beginForecastLoad();
+  const results = surf.BEACHES.map(() => ({
+    status: "rejected",
+    reason: new Error("offline"),
+  }));
+  assert.equal(surf.applyForecastResults(results, generation), true);
+  assert.equal(surf.state.forecasts.get(snapshot.beachId), snapshot);
+  assert.equal(surf.state.lastUpdated, lastUpdated);
+  assert.deepEqual(surf.scoredSampleCache.get("existing-cache"), { marker: "working" });
+});
+
+test("browser smoke hard timeout lets the cleanup finally run", () => {
+  assert.doesNotMatch(browserSmokeSource, /process\.exit\(/);
+  assert.match(browserSmokeSource, /page\?\.fail\(hardStopError\)/);
+});
+
+test("date keys advance by forecast calendar date across a host DST transition", () => {
+  const runtimePath = fileURLToPath(new URL("../runtime-utils.js", import.meta.url));
+  const childSource = `
+    import { readFileSync } from "node:fs";
+    import vm from "node:vm";
+    const context = { Date, Intl, TZ: "America/Sao_Paulo" };
+    vm.createContext(context);
+    vm.runInContext(readFileSync(process.env.SURF_RUNTIME_UTILS, "utf8"), context);
+    const now = new Date(process.env.SURF_NOW);
+    console.log(JSON.stringify([0, 1, 2, 3].map((offset) => context.dateKey(offset, now))));
+  `;
+  const output = execFileSync(process.execPath, ["--input-type=module", "-e", childSource], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+    env: {
+      ...process.env,
+      TZ: "Europe/Berlin",
+      SURF_RUNTIME_UTILS: runtimePath,
+      SURF_NOW: "2026-10-24T02:30:00.000Z",
+    },
+    encoding: "utf8",
+  });
+  assert.deepEqual(JSON.parse(output), ["2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26"]);
+});
+
+test("session refresh installs a periodic check for a tab that stays open", () => {
+  const listeners = new Map();
+  const intervals = [];
+  const originalAddEventListener = context.window.addEventListener;
+  const originalSetInterval = context.window.setInterval;
+  context.window.addEventListener = (name, callback) => listeners.set(name, callback);
+  context.window.setInterval = (callback, milliseconds) => {
+    intervals.push({ callback, milliseconds });
+    return intervals.length;
+  };
+  try {
+    surf.installSessionRefresh();
+    assert.equal(intervals.length, 1);
+    assert.equal(intervals[0].milliseconds, 60_000);
+  } finally {
+    context.window.addEventListener = originalAddEventListener;
+    context.window.setInterval = originalSetInterval;
+  }
+});
+
+test("the Now chip only claims the current hour inside the slider range", () => {
+  assert.equal(surf.isNowSelection(0, 18, 23), false);
+  assert.equal(surf.isNowSelection(0, 18, 18), true);
+  assert.equal(surf.isNowSelection(1, 18, 18), false);
+});
+
+test("score reasons use at-beach breaking height for the surfable-floor explanation", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "barra-da-lagoa");
+  surf.state.lang = "en";
+  const score = surf.scoreSample(beach, cleanAlignedSample(beach, { height: 0.7, period: 12 }), 0);
+  assert.ok(score.detail.breakingHeight < score.detail.minSurfHeight);
+  assert.match(score.reasons.join(" | "), /below the 0\.6 m surfable floor/);
+});
+
+test("schema-v2 truth ledgers agree with the score-model version", () => {
+  const entry = (algorithmVersion) => ({
+    id: "version-check",
+    beachId: "matadeiro",
+    capturedAt: "2026-07-31T10:00:00.000Z",
+    targetTime: "2026-07-31T11:00:00.000Z",
+    forecast: {
+      score: 60,
+      leadHours: 24,
+      algorithmVersion,
+      rawInputs: {},
+      dataQuality: {},
+      model: {},
+    },
+    observed: { rating: 3 },
+  });
+
+  assert.throws(
+    () => analyzeTruthLedger({ schemaVersion: 2, algorithmVersion: "1.9.0", entries: [entry("1.9.0")] }),
+    /score-model/i,
+  );
+  assert.throws(
+    () => analyzeTruthLedger({ schemaVersion: 2, algorithmVersion: "2.0.0", entries: [entry("1.9.0")] }),
+    /algorithmVersion/i,
+  );
+});
 
 test("runtime script lists match page order", () => {
   const makefile = readFileSync(new URL("../Makefile", import.meta.url), "utf8");
