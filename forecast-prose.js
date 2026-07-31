@@ -100,7 +100,9 @@ const DAY_PROSE = {
 // Representative size + cleanliness at the day's best hour. Returns the prose
 // keys consumed by describeDay's conditions sentence.
 function summarizeConditions(scan, best, dayPeak) {
-  const peakHourEntries = scan.filter((e) => e.hour === best.hour);
+  const peakHourEntries = scan.filter(
+    (e) => e.hour === best.hour && e.scored?.score?.status !== "unknown" && e.scored?.score?.dataQuality?.scorable !== false,
+  );
   const repHeight = average(
     peakHourEntries.map((e) => e.scored.score.detail?.breakingHeight),
   );
@@ -344,6 +346,9 @@ function describeSwell(beach, sample) {
   const height = Number.isFinite(offshoreHeight) && Number.isFinite(period)
     ? effectiveBreakingHeight(beach, offshoreHeight, period)
     : null;
+  const closeoutHeight = Number.isFinite(period)
+    ? periodAwareCloseoutHeight(beach, period)
+    : Infinity;
   const direction = effDir(sample);
   const directionDiff = angularDiff(direction, beach.swellCenter);
   const f = SWELL_PROSE[state.lang] ?? SWELL_PROSE.pt;
@@ -353,7 +358,7 @@ function describeSwell(beach, sample) {
     if (height < beach.idealHeight[0] * 0.65) heightKey = "small";
     else if (height < beach.idealHeight[0]) heightKey = "under";
     else if (height <= beach.idealHeight[1]) heightKey = "inRange";
-    else if (height < beach.maxHeight) heightKey = "above";
+    else if (height <= closeoutHeight) heightKey = "above";
     else heightKey = "big";
   }
 
@@ -589,6 +594,9 @@ function describeWeather(sample) {
 
 
 function contrastReason(selectedScored, otherScored) {
+  if (!isScorableContrast(selectedScored) || !isScorableContrast(otherScored)) {
+    return tBeach(selectedScored.beach, "whyNearby");
+  }
   const counterfactual = counterfactualContrastImpacts(selectedScored, otherScored);
   const selectedParts = selectedScored.score.parts;
   const otherParts = otherScored.score.parts;
@@ -622,9 +630,23 @@ function contrastReason(selectedScored, otherScored) {
     : "The weather grid is slightly different here, but swell and wind still matter more than rain or cloud.";
 }
 
+function isScorableContrast(scored) {
+  return Boolean(
+    scored?.score &&
+      scored.score.status !== "unknown" &&
+      scored.score.dataQuality?.scorable !== false,
+  );
+}
+
 function counterfactualContrastImpacts(selectedScored, otherScored) {
   const baseline = selectedScored.score.rawScore;
-  if (!Number.isFinite(baseline) || !selectedScored.sample || !otherScored.sample) return null;
+  if (
+    !Number.isFinite(baseline) ||
+    !selectedScored.sample ||
+    !otherScored.sample ||
+    !isScorableContrast(selectedScored) ||
+    !isScorableContrast(otherScored)
+  ) return null;
 
   const fields = {
     swell: [
@@ -637,18 +659,31 @@ function counterfactualContrastImpacts(selectedScored, otherScored) {
     tide: ["seaLevel", "nextSeaLevel", "tideState"],
     weather: ["temperature", "precipitationProbability", "cloudCover"],
   };
+  const beachFields = {
+    swell: ["swellCenter", "swellSpread"],
+    wind: ["offshoreWind"],
+    tide: ["idealTide", "tideSpread"],
+  };
   const impacts = {};
   for (const [key, names] of Object.entries(fields)) {
     const sample = { ...selectedScored.sample };
     for (const name of names) sample[name] = otherScored.sample[name];
-    const rescored = scoreSample(selectedScored.beach, sample, selectedScored.score.dataQuality?.horizonDays ?? 0);
+    const beach = { ...selectedScored.beach };
+    for (const name of beachFields[key] ?? []) beach[name] = otherScored.beach[name];
+    const rescored = scoreSample(beach, sample, selectedScored.score.dataQuality?.horizonDays ?? 0);
+    if (rescored.status === "unknown" || !Number.isFinite(rescored.rawScore)) return null;
     impacts[key] = Math.abs(baseline - rescored.rawScore);
   }
+  const coastalBeach = { ...otherScored.beach };
+  for (const name of ["offshoreWind", "swellCenter", "swellSpread", "idealTide", "tideSpread"]) {
+    coastalBeach[name] = selectedScored.beach[name];
+  }
   const otherCoast = scoreSample(
-    otherScored.beach,
+    coastalBeach,
     selectedScored.sample,
     selectedScored.score.dataQuality?.horizonDays ?? 0,
   );
+  if (otherCoast.status === "unknown" || !Number.isFinite(otherCoast.rawScore)) return null;
   impacts.coastal = Math.abs(baseline - otherCoast.rawScore);
   return impacts;
 }

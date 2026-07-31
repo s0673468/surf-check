@@ -108,6 +108,15 @@ function effectiveBreakingHeight(beach, height, period) {
   return breakingHeight(height, period) * shelterAttenuation(beach);
 }
 
+// The configured maxHeight is the deep-water size where a beach starts to
+// close out. Convert it to the same at-beach, period-aware scale used by the
+// scorer and the swell prose.
+function periodAwareCloseoutHeight(beach, period) {
+  if (!Number.isFinite(beach.maxHeight) || beach.maxHeight <= 0) return Infinity;
+  return effectiveBreakingHeight(beach, beach.maxHeight, 11) *
+    clamp((period / 11) ** 0.65, 0.78, 1.45);
+}
+
 // Soft-knee size term (0..1): diminishing returns with no early saturation, so
 // the whole 0.6-3.5 m breaking-height range stays separable.
 function sizeMagnitude(hb) {
@@ -289,11 +298,7 @@ function scoreSample(beach, sample, dayOffset) {
   const cleanliness = clamp(1 - 0.95 * windseaFrac, 0, 1);
 
   // Closeout: period-aware (long groundswell holds bigger), smooth toward ~0.15.
-  const closeoutHeight =
-    Number.isFinite(beach.maxHeight) && beach.maxHeight > 0
-      ? effectiveBreakingHeight(beach, beach.maxHeight, 11) *
-        clamp((swellPeriod / 11) ** 0.65, 0.78, 1.45)
-      : Infinity;
+  const closeoutHeight = periodAwareCloseoutHeight(beach, swellPeriod);
   const oversize =
     Number.isFinite(hb) && hb > closeoutHeight
       ? clamp(1 - 0.9 * ((hb - closeoutHeight) / (0.5 * beach.maxHeight)), 0.15, 1)
