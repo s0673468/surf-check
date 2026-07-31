@@ -568,6 +568,17 @@ test("swell prose compares the shelter-adjusted breaking estimate with the spot 
   assert.doesNotMatch(read, /ideal range/);
 });
 
+test("swell prose calls a period-aware closeout size big", () => {
+  const beach = surf.BEACHES.find((item) => item.id === "barra-da-lagoa");
+  const sample = cleanAlignedSample(beach, { height: 2.6, period: 11 });
+  surf.state.lang = "en";
+
+  assert.match(
+    surf.describeSwell(beach, sample).short,
+    /bigger than this spot usually handles well/,
+  );
+});
+
 test("nearby contrast prose falls back when scores are nearly tied", () => {
   const selectedBeach = surf.BEACHES.find((item) => item.id === "praia-mole");
   const otherBeach = surf.BEACHES.find((item) => item.id === "joaquina");
@@ -608,6 +619,55 @@ test("nearby contrast prose names the dominant factor", () => {
 
   surf.state.lang = "en";
   assert.match(surf.contrastReason(selectedScored, otherScored), /Wind is closer to offshore/);
+});
+
+test("nearby contrast attributes beach wind orientation to wind, not coastal shape", () => {
+  const selectedBeach = surf.BEACHES.find((item) => item.id === "praia-mole");
+  const otherBeach = {
+    ...selectedBeach,
+    name: "Praia Mole wind counterfactual",
+    offshoreWind: 238,
+  };
+  const sample = cleanAlignedSample(selectedBeach, { height: 1.4, period: 12 });
+  const selected = {
+    beach: selectedBeach,
+    sample,
+    score: surf.scoreSample(selectedBeach, sample, 0),
+  };
+  const other = {
+    beach: otherBeach,
+    sample: { ...sample },
+  };
+  other.score = surf.scoreSample(otherBeach, other.sample, 0);
+
+  const impacts = surf.counterfactualContrastImpacts(selected, other);
+  assert.ok(impacts.wind > impacts.coastal, JSON.stringify(impacts));
+  surf.state.lang = "en";
+  assert.match(surf.contrastReason(selected, other), /Wind is closer to offshore/);
+});
+
+test("nearby contrast does not attribute an unscorable neighbour to a factor", () => {
+  const selectedBeach = surf.BEACHES.find((item) => item.id === "praia-mole");
+  const otherBeach = surf.BEACHES.find((item) => item.id === "joaquina");
+  const selectedSample = cleanAlignedSample(selectedBeach);
+  const selected = {
+    beach: selectedBeach,
+    sample: selectedSample,
+    score: surf.scoreSample(selectedBeach, selectedSample, 0),
+  };
+  const otherSample = {
+    ...cleanAlignedSample(otherBeach),
+    windSpeed: null,
+    windDirection: null,
+  };
+  const other = {
+    beach: otherBeach,
+    sample: otherSample,
+    score: surf.scoreSample(otherBeach, otherSample, 0),
+  };
+
+  surf.state.lang = "en";
+  assert.match(surf.contrastReason(selected, other), /Mole and Joaquina are close/);
 });
 
 test("nearby contrast attribution uses actual counterfactual score deltas", () => {
@@ -1751,6 +1811,24 @@ test("day prose helper keys track size, cleanliness, windows, and trends", () =>
   assert.equal(
     surf.summarizeConditions(conditionScan, { hour: 8 }, 20).sizeKey,
     "flat",
+  );
+
+  const unknownAtPeak = [
+    entry(8, 72, 1.2, 40),
+    {
+      ...entry(8, 0, 1.2, 90),
+      scored: {
+        ...entry(8, 0, 1.2, 90).scored,
+        score: {
+          ...entry(8, 0, 1.2, 90).scored.score,
+          status: "unknown",
+        },
+      },
+    },
+  ];
+  assert.equal(
+    surf.summarizeConditions(unknownAtPeak, { hour: 8 }, 72).cleanKey,
+    "messy",
   );
 
   const fading = [
