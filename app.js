@@ -326,7 +326,7 @@ function initializeMap() {
 
   for (const beach of BEACHES) {
     const marker = L.marker([beach.lat, beach.lon], {
-      icon: makeMarkerIcon(null, beach, false),
+      icon: makeMarkerIcon(null, false),
       title: beach.name,
       alt: t("mapMarkerEmpty", beach.name),
     })
@@ -377,7 +377,7 @@ function initializeFallbackMap() {
   }
 }
 
-function makeMarkerIcon(score, beach, selected = false) {
+function makeMarkerIcon(score, selected = false) {
   const className = `map-pin ${pinClass(score)}${selected ? " is-selected" : ""}`;
   const label = Number.isFinite(score) ? String(Math.round(score)) : "--";
   return L.divIcon({
@@ -596,7 +596,7 @@ function updateMarkers(view = getForecastView()) {
       // actually changed — a slider drag otherwise mints 11 fresh icons per step.
       const viewKey = `${label}:${selected}`;
       if (marker.__viewKey !== viewKey) {
-        marker.setIcon(makeMarkerIcon(score, beach, selected));
+        marker.setIcon(makeMarkerIcon(score, selected));
         marker.__viewKey = viewKey;
       }
       marker.setZIndexOffset(selected ? 1000 : 0);
