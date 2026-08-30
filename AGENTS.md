@@ -18,20 +18,26 @@ Agent-facing operating notes for this repo.
   relevant local gate, open a ready PR, and babysit required CI without pausing
   for permission.
 - Pause and ask before destructive data changes, private-data publication,
-  credential or access changes, force-pushes, broad product direction shifts, or
-  workflow/deploy/scheduled-job changes that need external approval.
+  credential or access changes, production database/storage application,
+  force-pushes, or broad product direction shifts. High-risk implementation is
+  governed by the review gate below rather than requiring approval by class.
 - For non-trivial repo changes, use a normal ready PR. Use draft only when the
   work is intentionally incomplete.
-- Request extra Codex review only for high-risk changes: data sync, ingestion,
-  freshness, provenance, migrations, schema/storage, auth/secrets,
-  CI/deploy/public access, launchd/cron/scheduled/background automation, mobile
-  offline/cache/startup/headless/notifications, broad refactors/shared
-  contracts, or private-data/public-artifact exposure.
-- Treat review comments as triage findings: P1/P2 findings must be fixed or
-  explicitly dismissed with evidence before merge. Low-risk PRs with green CI
-  can merge without extra review.
+- After the final local gate and green required CI, run one exact-head and
+  exact-base GPT-5.6 Luna review at Max reasoning for high-risk changes: data
+  sync, ingestion, freshness, provenance, migrations, schema/storage,
+  auth/secrets, CI/deploy/public access, launchd/cron/scheduled/background
+  automation, mobile offline/cache/startup/headless/notifications, broad
+  refactors/shared contracts, or private-data/public-artifact exposure. Use
+  `pr-shepherd review --high-risk`; no other model or reviewer is a fallback.
+- A second provider pass is allowed only for materially new high-risk scope
+  (`--new-scope "<why>"`) or at German's explicit request (`--force`). Do not
+  provider-re-review a normal fix head; verify the fix diff with local Luna Max.
+- Treat review comments as hypotheses: P1/P2 findings must be fixed or
+  explicitly dismissed with evidence before merge, and only P1 blocks. Low-risk
+  PRs with green CI do not require provider review.
 - After local validation, green required checks, and resolved high-risk findings,
-  squash-merge ready PRs.
+  use the synchronous guarded squash merge for Luna-reviewed PRs.
 
 ## Working Rules
 
