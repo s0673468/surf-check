@@ -13,31 +13,17 @@ Agent-facing operating notes for this repo.
 
 ## Shared Agent Policy
 
-- Favor autonomy: when a low-risk docs, tests, typing, lint, or small behavior
-  fix is clearly useful and locally reviewable, make the change, run the
-  relevant local gate, open a ready PR, and babysit required CI without pausing
-  for permission.
-- Pause and ask before destructive data changes, private-data publication,
-  credential or access changes, production database/storage application,
-  force-pushes, or broad product direction shifts. High-risk implementation is
-  governed by the review gate below rather than requiring approval by class.
-- For non-trivial repo changes, use a normal ready PR. Use draft only when the
-  work is intentionally incomplete.
-- After the final local gate and green required CI, run one exact-head and
-  exact-base GPT-5.6 Luna review at Max reasoning for high-risk changes: data
-  sync, ingestion, freshness, provenance, migrations, schema/storage,
-  auth/secrets, CI/deploy/public access, launchd/cron/scheduled/background
-  automation, mobile offline/cache/startup/headless/notifications, broad
-  refactors/shared contracts, or private-data/public-artifact exposure. Use
-  `pr-shepherd review --high-risk`; no other model or reviewer is a fallback.
-- A second provider pass is allowed only for materially new high-risk scope
-  (`--new-scope "<why>"`) or at German's explicit request (`--force`). Do not
-  provider-re-review a normal fix head; verify the fix diff with local Luna Max.
-- Treat review comments as hypotheses: P1/P2 findings must be fixed or
-  explicitly dismissed with evidence before merge, and only P1 blocks. Low-risk
-  PRs with green CI do not require provider review.
-- After local validation, green required checks, and resolved high-risk findings,
-  use the synchronous guarded squash merge for Luna-reviewed PRs.
+Follow `~/.config/agent-policy/git-golden-standard.md` for change tiers,
+local validation cadence, provider review, finding handling, guarded delivery,
+and cleanup. Use ready PRs and carry authorized work through required CI.
+
+Classify risk by changed behavior and a concrete failure path, such as exposing
+private data or widening publication access. File location and refactor size
+alone do not make a harmless change high-risk. Preserve explicit approval
+boundaries for destructive data, credentials/access, and private-data publication.
+
+Use affected checks locally; CI owns the full suite for standard changes. Run the
+full local gate when the shared tier or integration/debugging risk warrants it.
 
 ## Working Rules
 
