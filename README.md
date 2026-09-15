@@ -69,7 +69,9 @@ when no supported executable is present locally. In CI, a missing browser fails 
 
 ## Runtime structure
 
-The app deliberately stays as classic scripts with no bundler:
+The app deliberately stays as classic scripts with no bundler. `index.html`
+loads the eight scripts in the order listed below; `tests/smoke.mjs` mirrors
+that order before exporting runtime helpers for direct tests:
 
 - `surf-config.js` — surf-region config, beach/profile data, localized static
   dictionaries, shared time-window constants, and the spot-profile lookup.
@@ -78,10 +80,12 @@ The app deliberately stays as classic scripts with no bundler:
 - `forecast-api.js` — Open-Meteo hourly field lists, beach forecast URL construction,
   payload validation, provider/grid metadata retention, shared `fetchJson` retry behavior,
   and delay handling.
-- `score-model.js` — the 0–100 scoring model, score tiers, score labels, scoring
-  reasons, and swell/wind/tide scoring helpers.
+- `score-model.js` — the versioned 0–100 scoring contract, score tiers, score labels,
+  scoring reasons, unknown-input state, qualitative data-quality metadata, and
+  swell/wind/tide scoring helpers.
 - `forecast-selectors.js` — selected-hour forecast views, scored-sample extraction,
-  memoization, rankings, nearby-beach comparisons, and tide-state normalization.
+  memoization, raw-score rankings, near-tied top groups, nearby-beach comparisons,
+  and tide-state normalization.
 - `forecast-prose.js` — day summaries, spot reads, metric explanations,
   nearby-spot counterfactual contrast reasons, factor labels, and qualitative data-quality metadata.
 - `rain-radar.js` — RainViewer metadata loading, frame normalization, frame matching,

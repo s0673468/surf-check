@@ -43,30 +43,10 @@ full local gate when the shared tier or integration/debugging risk warrants it.
 - Avoid dependencies unless they clearly pay for themselves; the current no-build
   shape is deliberate.
 
-## Runtime Map
+## Runtime map
 
-- [index.html](index.html) loads the classic scripts in dependency order:
-  `surf-config.js`, `runtime-utils.js`, `forecast-api.js`,
-  `score-model.js`, `forecast-selectors.js`, `forecast-prose.js`,
-  `rain-radar.js`, then `app.js`.
-- [surf-config.js](surf-config.js) owns static beach/profile data, localized
-  static dictionaries, shared time-window constants, and the spot-profile
-  lookup.
-- [runtime-utils.js](runtime-utils.js) owns shared date, formatting, numeric,
-  compass, geometry, clamp, and selected-beach helpers.
-- [forecast-api.js](forecast-api.js) owns Open-Meteo fetch/retry behavior,
-  hourly normalization, and provider/grid metadata retention for calibration.
-- [score-model.js](score-model.js) owns the versioned score contract, physical
-  scoring, unknown-input state, and qualitative data-quality metadata.
-- [forecast-selectors.js](forecast-selectors.js) owns scored-sample extraction,
-  raw-score ranking, near-tied top groups, caching, and tide normalization.
-- [forecast-prose.js](forecast-prose.js) owns day summaries, spot reads,
-  metric explanations, session-window recommendations, counterfactual nearby
-  contrast reasons, factor labels, and data-quality copy.
-- [app.js](app.js) owns localization accessors, state, orchestration, DOM
-  rendering, and map marker rendering.
-- [tests/smoke.mjs](tests/smoke.mjs) mirrors the same script order before
-  exporting runtime helpers for direct tests.
+[README runtime structure](README.md#runtime-structure) owns the module map and
+classic-script dependency order. Keep the page and direct-test harness aligned.
 
 ## Validation Contract
 
