@@ -402,19 +402,20 @@ test("forecast truth helper compares one forecast with one observed session", ()
       },
     ],
   });
-  const [entry] = analysis.comparisons;
+  const [entry] = analysis.diagnostics.comparisons;
   const summary = formatTruthSummary(analysis);
 
   assert.equal(entry.forecastBand, "marginal");
   assert.equal(entry.observedBand, "workable");
   assert.equal(entry.ratingDelta, 1);
   assert.equal(entry.heightDeltaM, -0.06);
-  assert.equal(analysis.summary.tooPessimistic, 1);
-  assert.equal(analysis.summary.meanAbsoluteTierError, 1);
-  assert.equal(analysis.summary.withinOneTierRate, 1);
-  assert.equal(analysis.summary.surfableRecall, 0);
+  assert.equal(analysis.diagnostics.summary.tooPessimistic, 1);
+  assert.equal(analysis.diagnostics.summary.meanAbsoluteTierError, 1);
+  assert.equal(analysis.diagnostics.summary.withinOneTierRate, 1);
+  assert.equal(analysis.diagnostics.summary.surfableRecall, 0);
+  assert.equal(analysis.summary.entryCount, 0);
   assert.match(summary, /matadeiro/);
-  assert.match(summary, /\+1/);
+  assert.match(summary, /schema v2 forecast snapshot required/);
 });
 
 test("forecast truth height bias prefers the scored at-beach breaking estimate", () => {
@@ -432,7 +433,7 @@ test("forecast truth height bias prefers the scored at-beach breaking estimate",
       observed: { rating: 2, heightM: 0.8 },
     }],
   });
-  assert.equal(analysis.comparisons[0].heightDeltaM, 0.1);
+  assert.equal(analysis.diagnostics.comparisons[0].heightDeltaM, 0.1);
 });
 
 test("forecast truth helper measures classification, ranking, and top-pick regret", () => {
@@ -453,13 +454,13 @@ test("forecast truth helper measures classification, ranking, and top-pick regre
     ],
   });
 
-  assert.equal(analysis.summary.withinOneTierRate, 1);
-  assert.equal(analysis.summary.surfableFalsePositiveRate, 1);
-  assert.equal(analysis.summary.surfableRecall, 1);
-  assert.equal(analysis.summary.pairwiseRankingAccuracy, 0.6667);
-  assert.equal(analysis.summary.pairwiseComparisons, 3);
-  assert.equal(analysis.summary.meanTopPickRegret, 1);
-  assert.equal(analysis.summary.rankedWindows, 1);
+  assert.equal(analysis.diagnostics.summary.withinOneTierRate, 1);
+  assert.equal(analysis.diagnostics.summary.surfableFalsePositiveRate, 1);
+  assert.equal(analysis.diagnostics.summary.surfableRecall, 1);
+  assert.equal(analysis.diagnostics.summary.pairwiseRankingAccuracy, 0.6667);
+  assert.equal(analysis.diagnostics.summary.pairwiseComparisons, 3);
+  assert.equal(analysis.diagnostics.summary.meanTopPickRegret, 1);
+  assert.equal(analysis.diagnostics.summary.rankedWindows, 1);
 });
 
 test("browser truth export preserves the exact forecast contract without inventing observations", () => {
@@ -482,6 +483,8 @@ test("browser truth export preserves the exact forecast contract without inventi
   const entry = surf.buildForecastTruthTemplate(scored);
 
   assert.equal(entry.status, "template");
+  assert.equal(entry.evidenceKind, "unverified");
+  assert.equal(entry.observed.observedAt, null);
   assert.equal(entry.targetTime, "2026-07-10T11:00:00.000Z");
   assert.equal(entry.forecast.leadHours, 24);
   assert.equal(entry.forecast.algorithmVersion, "2.0.0");

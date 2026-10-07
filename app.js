@@ -896,6 +896,7 @@ function buildForecastTruthTemplate(scored, capturedAt = scored.forecastMetadata
   return {
     id: `${sample.time?.slice(0, 10) ?? "date"}-${scored.beach.id}-${timeSlug}`,
     status: "template",
+    evidenceKind: "unverified",
     beachId: scored.beach.id,
     capturedAt: Number.isFinite(captured.getTime()) ? captured.toISOString() : capturedAt,
     targetTime: target?.toISOString() ?? sample.time,
@@ -936,6 +937,7 @@ function buildForecastTruthTemplate(scored, capturedAt = scored.forecastMetadata
       },
     },
     observed: {
+      observedAt: null,
       rating: null,
       heightM: null,
       cleanliness: "",
