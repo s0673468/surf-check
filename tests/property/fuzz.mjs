@@ -414,7 +414,9 @@ test("forecast truth ledger analysis is deterministic over generated entries", (
     const first = analyzeTruthLedger(ledger);
     const second = analyzeTruthLedger(roundTripped);
     assert.deepEqual(second, first, `ledger analysis must round-trip for seed ${seed}`);
-    assert.equal(first.summary.entryCount, entries.filter((entry) => !["template", "example"].includes(entry.status)).length);
+    assert.equal(first.summary.entryCount, 0, "generated legacy rows are never field validation");
+    assert.equal(first.collection.sampleMinimumMet, false);
+    assert.equal(first.diagnostics.summary.entryCount, entries.filter((entry) => !["template", "example"].includes(entry.status)).length);
     assert.doesNotMatch(formatTruthSummary(first), /\b(undefined|NaN)\b/);
     for (const entry of entries.filter((item) => !["template", "example"].includes(item.status))) {
       assert.deepEqual(compareTruthEntry(entry), compareTruthEntry(JSON.parse(JSON.stringify(entry))));
