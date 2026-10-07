@@ -11,7 +11,8 @@
   },
   "entryTemplate": {
     "id": "YYYY-MM-DD-beach-id-HHMM",
-    "status": "observed",
+    "status": "template",
+    "evidenceKind": "unverified",
     "beachId": "joaquina",
     "capturedAt": "YYYY-MM-DDTHH:MM:SS-03:00",
     "targetTime": "YYYY-MM-DDTHH:00:00-03:00",
@@ -23,6 +24,7 @@
       "algorithmVersion": "2.0.0",
       "leadHours": 24,
       "dataQuality": {
+        "scorable": true,
         "tier": "high",
         "completeness": 1.0,
         "missingEssential": []
@@ -48,14 +50,15 @@
       }
     },
     "observed": {
-      "rating": 3,
-      "heightM": 1.0,
-      "cleanliness": "clean",
-      "board": "shortboard",
-      "rater": "initials or stable alias",
-      "crowd": 2,
-      "accessNotes": "Keep access and crowd separate from wave quality.",
-      "notes": "Short note from the beach check."
+      "observedAt": "YYYY-MM-DDTHH:MM:SS-03:00",
+      "rating": null,
+      "heightM": null,
+      "cleanliness": "",
+      "board": "",
+      "rater": "",
+      "crowd": null,
+      "accessNotes": "",
+      "notes": ""
     },
     "tags": ["small-clean"]
   },

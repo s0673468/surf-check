@@ -263,23 +263,37 @@ The browser score contract is versioned as `2.0.0`. Each result keeps an integer
 `dataQuality`. Missing essential wave or wind fields set `status: "unknown"`,
 `dataQuality.scorable: false`, and a low quality tier rather than claiming confidence.
 
-For the local forecast-truth loop, append real manual observations to
-`calibration/forecast-truth-ledger.json` after checking a beach. Pair the beach and local
+For the local forecast-truth loop, use `calibration/forecast-truth-ledger.json` as the
+empty starting format for a private local ledger. After checking a beach, pair it and local
 time with the exact forecast snapshot you saw, then add the observed 1–5 session rating,
 height, cleanliness, and tags. Schema v2 records capture and target timestamps, lead time,
 algorithm version, raw inputs, field completeness, and provider/model/grid metadata. Do
 not create synthetic observations or reconstruct a forecast from a later model run. The
 download button beside the selected beach exports a schema-v2 template with the exact current
 forecast; change its status from `template` to `observed` only after filling the real beach
-check, including board/rater and separate crowd/access notes. Run:
+check, setting `evidenceKind: "field"`, and recording `observed.observedAt` with a timezone,
+board/rater and separate crowd/access notes. Keep actual observations in a private local
+JSON file: this repository is public. The helper reads that file offline:
+
+```bash
+node scripts/forecast-truth.mjs /path/to/private-forecast-truth-ledger.json
+```
+
+To check the empty repository ledger, run:
 
 ```bash
 npm run forecast-truth
 ```
 
-Use the summary to spot repeat bias before changing `score-model.js`; do not retune from
-one row. Once multiple beaches share the same observed window, the report also measures
+The summary counts only eligible field observations and reports progress toward 40–60
+unique matched spot-hours and 15 distinct same-window checks. It excludes synthetic,
+legacy, unverified, late, incomplete, and duplicate rows with reasons; the helper API
+keeps their arithmetic under `diagnostics`. Use the field summary to spot repeat bias
+before changing `score-model.js`; do not retune from one row. Once comparable distinct
+beaches share the same observed window, the report also measures
 mean absolute tier error, within-one-tier accuracy, surfable false positives and recall,
 pairwise beach-ranking accuracy, and top-pick regret. Keep the current model and a simple
-baseline frozen while collecting enough held-out dates to compare them honestly.
+baseline frozen while collecting enough held-out dates to compare them honestly. Meeting
+sample counts does not establish empirical validation; the helper cannot verify a beach
+visit or an unaltered snapshot.
 See [`docs/calibration-protocol.md`](docs/calibration-protocol.md) for the complete protocol.
