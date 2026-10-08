@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import "./test_helper_boundaries.mjs";
 import { fileURLToPath } from "node:url";
 import {
   analyzeTruthLedger,
