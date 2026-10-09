@@ -217,6 +217,46 @@ test("date keys advance by forecast calendar date across a host DST transition",
   assert.deepEqual(JSON.parse(output), ["2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26"]);
 });
 
+test("forecast labels keep their calendar date across browser DST changes", () => {
+  const runtimePath = fileURLToPath(new URL("../runtime-utils.js", import.meta.url));
+  const childSource = `
+    import { readFileSync } from "node:fs";
+    import vm from "node:vm";
+    const now = Date.parse(process.env.SURF_NOW);
+    class FixedDate extends Date {
+      constructor(...args) { super(...(args.length ? args : [now])); }
+      static now() { return now; }
+    }
+    const context = { Date: FixedDate, Intl, TZ: "America/Sao_Paulo", state: { lang: "en" } };
+    vm.createContext(context);
+    vm.runInContext(readFileSync(process.env.SURF_RUNTIME_UTILS, "utf8"), context);
+    console.log(JSON.stringify([0, 1, 2, 3].map((offset) => ({
+      date: context.dateKey(offset), day: context.formatDay(offset),
+      weekday: context.formatWeekday(offset),
+    }))));
+  `;
+  const cases = [
+    { timezone: "America/New_York", now: "2026-03-08T03:30:00.000Z",
+      dates: ["2026-03-08", "2026-03-09", "2026-03-10", "2026-03-11"],
+      days: ["Sun, Mar 8", "Mon, Mar 9", "Tue, Mar 10", "Wed, Mar 11"],
+      weekdays: ["Sun", "Mon", "Tue", "Wed"] },
+    { timezone: "Europe/Berlin", now: "2026-10-24T02:30:00.000Z",
+      dates: ["2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26"],
+      days: ["Fri, Oct 23", "Sat, Oct 24", "Sun, Oct 25", "Mon, Oct 26"],
+      weekdays: ["Fri", "Sat", "Sun", "Mon"] },
+  ];
+  for (const fixture of cases) {
+    const output = execFileSync(process.execPath, ["--input-type=module", "-e", childSource], {
+      cwd: fileURLToPath(new URL("..", import.meta.url)),
+      env: { ...process.env, TZ: fixture.timezone, SURF_RUNTIME_UTILS: runtimePath,
+        SURF_NOW: fixture.now }, encoding: "utf8",
+    });
+    assert.deepEqual(JSON.parse(output), fixture.dates.map((date, offset) => ({
+      date, day: fixture.days[offset], weekday: fixture.weekdays[offset],
+    })), fixture.timezone);
+  }
+});
+
 test("session refresh installs a periodic check for a tab that stays open", () => {
   const listeners = new Map();
   const intervals = [];

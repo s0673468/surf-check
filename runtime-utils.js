@@ -98,12 +98,12 @@ function dateKey(offset, now = new Date()) {
 }
 
 function formatDay(offset) {
-  const now = new Date();
-  const target = new Date(now);
-  target.setDate(now.getDate() + offset);
+  // dateKey already selects the forecast calendar date in TZ. Format that
+  // date in UTC so a browser's own DST cannot shift its label to another day.
+  const target = new Date(`${dateKey(offset)}T00:00:00Z`);
   return capitalize(
     new Intl.DateTimeFormat(localeTag(), {
-      timeZone: TZ,
+      timeZone: "UTC",
       weekday: "short",
       month: "short",
       day: "numeric",
@@ -112,11 +112,11 @@ function formatDay(offset) {
 }
 
 function formatWeekday(offset) {
-  const now = new Date();
-  const target = new Date(now);
-  target.setDate(now.getDate() + offset);
+  // dateKey already selects the forecast calendar date in TZ. Format that
+  // date in UTC so a browser's own DST cannot shift its label to another day.
+  const target = new Date(`${dateKey(offset)}T00:00:00Z`);
   const label = new Intl.DateTimeFormat(localeTag(), {
-    timeZone: TZ,
+    timeZone: "UTC",
     weekday: "short",
   }).format(target);
   return capitalize(label.replace(/\.$/, ""));
