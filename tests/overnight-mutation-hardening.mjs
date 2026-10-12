@@ -13,9 +13,9 @@ for (const file of ["runtime-utils.js", "forecast-api.js"]) {
   vm.runInContext(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), context,
     { filename: file, timeout: 1000 });
 }
-vm.runInContext("globalThis.__surfOvernightTest = { requireHourlyPayload, forecastPayloadMetadata }", context,
+vm.runInContext("globalThis.__surfOvernightTest = { requireHourlyPayload, forecastPayloadMetadata, numericCell }", context,
   { timeout: 1000 });
-const { requireHourlyPayload, forecastPayloadMetadata } = context.__surfOvernightTest;
+const { requireHourlyPayload, forecastPayloadMetadata, numericCell } = context.__surfOvernightTest;
 
 test("hourly normalization fills each requested gap without changing frozen provider input", () => {
   const time = Object.freeze(["2026-10-11T06:00", "2026-10-11T07:00", "2026-10-11T08:00"]);
@@ -66,4 +66,36 @@ test("forecast metadata retains provider zeros separately from requested beach c
   }
   assert.equal(invalid.requestedLatitude, beach.lat);
   assert.equal(invalid.requestedLongitude, beach.lon);
+});
+
+test("boolean provider metadata is missing while numeric zero and numeric strings remain valid", () => {
+  const beach = Object.freeze({ lat: -27.61, lon: -48.52 });
+  const booleans = Object.freeze({
+    latitude: true, longitude: false, elevation: true,
+    utc_offset_seconds: false, generationtime_ms: true,
+  });
+  const missing = forecastPayloadMetadata(booleans, beach);
+  for (const field of ["latitude", "longitude", "elevation", "utcOffsetSeconds", "generationTimeMs"]) {
+    assert.equal(missing[field], null, field);
+  }
+  assert.equal(missing.requestedLatitude, beach.lat);
+  assert.equal(missing.requestedLongitude, beach.lon);
+  assert.equal(booleans.latitude, true);
+  assert.equal(booleans.longitude, false);
+
+  const valid = Object.freeze({
+    latitude: 0, longitude: " 0 ", elevation: " 12.5 ",
+    utc_offset_seconds: 0, generationtime_ms: "0",
+  });
+  const metadata = forecastPayloadMetadata(valid, beach);
+  assert.equal(metadata.latitude, 0);
+  assert.equal(metadata.longitude, 0);
+  assert.equal(metadata.elevation, 12.5);
+  assert.equal(metadata.utcOffsetSeconds, 0);
+  assert.equal(metadata.generationTimeMs, 0);
+  assert.equal(valid.longitude, " 0 ");
+  assert.equal(numericCell(true), null);
+  assert.equal(numericCell(false), null);
+  assert.equal(numericCell(null), null);
+  assert.equal(numericCell("   "), null);
 });
