@@ -52,7 +52,7 @@ function valueAt(hourly, key, index) {
 
 function numericCell(value) {
   const normalized = typeof value === "string" ? value.trim() : value;
-  if (normalized === null || normalized === undefined || normalized === "") return null;
+  if (normalized === null || normalized === undefined || normalized === "" || typeof normalized === "boolean") return null;
   const numeric = Number(normalized);
   return Number.isFinite(numeric) ? numeric : null;
 }
