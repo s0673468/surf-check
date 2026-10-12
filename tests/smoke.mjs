@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import "./test_helper_boundaries.mjs";
+import "./overnight-mutation-hardening.mjs";
 import { fileURLToPath } from "node:url";
 import {
   analyzeTruthLedger,
