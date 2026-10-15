@@ -438,8 +438,12 @@ async function launchChrome(chromePath) {
       "--hide-scrollbars",
       "about:blank",
     ],
-    { stdio: "ignore" },
+    { stdio: ["ignore", "ignore", "pipe"] },
   );
+  let stderrTail = Buffer.alloc(0);
+  child.stderr.on("data", (chunk) => {
+    stderrTail = Buffer.concat([stderrTail, chunk.subarray(-8_192)]).subarray(-8_192);
+  });
   child.unref();
 
   const portFile = join(profile, "DevToolsActivePort");
@@ -450,16 +454,30 @@ async function launchChrome(chromePath) {
       return Number(readFileSync(portFile, "utf8").split("\n")[0]) || null;
     }, 10_000, "Chrome did not expose a DevTools port");
   } catch (error) {
-    await stopChildProcess(child);
-    removeBrowserProfile(profile);
-    throw error;
+    const diagnostics = {
+      binary: chromePath,
+      exitCode: child.exitCode,
+      signalCode: child.signalCode,
+      stderr: stderrTail.toString("utf8"),
+    };
+    try {
+      await stopChildProcess(child);
+    } finally {
+      child.stderr.destroy();
+      removeBrowserProfile(profile);
+    }
+    throw new Error(`${error.message}\nChrome startup diagnostics: ${JSON.stringify(diagnostics)}`, { cause: error });
   }
 
   return {
     debugPort,
     async close() {
-      await stopChildProcess(child);
-      removeBrowserProfile(profile);
+      try {
+        await stopChildProcess(child);
+      } finally {
+        child.stderr.destroy();
+        removeBrowserProfile(profile);
+      }
     },
   };
 }
